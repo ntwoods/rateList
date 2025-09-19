@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Rate List Portal</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <div class="container">
+    <h1>Rate List Portal</h1>
+
+    <!-- Quick actions -->
+    <section>
+      <h2>Add Dealer</h2>
+      <input id="dealerName" placeholder="Dealer name"/>
+      <button onclick="addDealer()">Add</button>
+      <p id="dealerMsg"></p>
+    </section>
+
+    <section>
+      <h2>Add Category</h2>
+      <input id="categoryName" placeholder="Category name"/>
+      <button onclick="addCategory()">Add</button>
+      <p id="categoryMsg"></p>
+    </section>
+
+    <section>
+      <h2>Add Product</h2>
+      <input id="prodName" placeholder="Product name"/>
+      <input id="prodSize" placeholder="Size"/>
+      <select id="prodCategory"></select>
+      <button onclick="addProduct()">Add</button>
+      <p id="productMsg"></p>
+    </section>
+
+    <section>
+      <h2>Save New Rates</h2>
+      <select id="dealerSelect"></select>
+      <button onclick="loadDealerRates()">Get Data</button>
+      <div id="ratesArea" style="display:none">
+        <label>New W.E.F: <input type="date" id="wefInput"/></label>
+        <label>Payment Term:
+          <select id="termSelect"><option value="15">15</option><option value="30">30</option></select>
+        </label>
+        <label>Apply Term:
+          <select id="applyTerm"><option value="all">All</option><option value="per-item">Per Item</option></select>
+        </label>
+        <div id="ratesTable"></div>
+        <button onclick="submitNewRates()">Save</button>
+        <p id="saveMsg"></p>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
