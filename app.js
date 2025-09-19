@@ -133,8 +133,9 @@ async function submitNewRates(){
       items.push({...p,rate:Number(rate),term});
     }
   });
-  await fetch(API_URL,{
-    method:"POST", mode:"no-cors",
+  await fetch(API_URL, {
+    method: "POST", mode: "no-cors",
+    headers: {"Content-Type":"application/json"},
     body: JSON.stringify({action:"saveRates", payload:{dealer,wefDate:wef,applyTerm,globalTerm,items}})
   });
   loadDealerRates();
