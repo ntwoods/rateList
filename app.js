@@ -1,49 +1,79 @@
 // Replace with your GAS WebApp URL
 const API_URL = "https://script.google.com/macros/s/AKfycbwlNW-se6IofauEr3rf-6_SmvH9o92r16_qltSz6Uj6HUKTsIBGHxsXtBRTxcMNuFw/exec";
 
-// Fetch initial data
+// Fetch initial data (GET is safe, no need for no-cors)
 async function init(){
-  const res = await fetch(`${API_URL}?action=getInitialData`);
-  const data = await res.json();
-  if(!data.ok){alert("Error loading data");return;}
-  fillOptions("dealerSelect", data.dealers);
-  fillOptions("prodCategory", data.categories);
+  try {
+    const res = await fetch(`${API_URL}?action=getInitialData`);
+    const data = await res.json();
+    if(!data.ok){ alert("Error loading data"); return; }
+    fillOptions("dealerSelect", data.dealers);
+    fillOptions("prodCategory", data.categories);
+  } catch(err){
+    alert("Error loading data: " + err.message);
+  }
 }
+
 function fillOptions(id,arr){
-  const sel=document.getElementById(id); sel.innerHTML="";
+  const sel=document.getElementById(id);
+  sel.innerHTML="";
+  const def=document.createElement("option");
+  def.value=""; def.textContent="-- select --";
+  sel.appendChild(def);
   arr.forEach(v=>{
-    const o=document.createElement("option"); o.value=v;o.textContent=v; sel.appendChild(o);
+    const o=document.createElement("option"); o.value=v; o.textContent=v;
+    sel.appendChild(o);
   });
 }
 
-// Add dealer/category/product
+// Add dealer/category/product (POST → no-cors → then refresh via GET)
 async function addDealer(){
-  const name=document.getElementById("dealerName").value;
-  const res=await fetch(API_URL,{method:"POST",mode:"no-cors",body:JSON.stringify({action:"addDealer",name})});
-  init();
+  const name=document.getElementById("dealerName").value.trim();
+  if(!name){ alert("Enter dealer name"); return; }
+  await fetch(API_URL,{
+    method:"POST", mode:"no-cors",
+    body: JSON.stringify({action:"addDealer", name})
+  });
+  document.getElementById("dealerName").value="";
+  init(); // refresh list
 }
+
 async function addCategory(){
-  const name=document.getElementById("categoryName").value;
-  const res=await fetch(API_URL,{method:"POST",mode:"no-cors",body:JSON.stringify({action:"addCategory",name})});
-  init();
-}
-async function addProduct(){
-  const product=document.getElementById("prodName").value;
-  const category=document.getElementById("prodCategory").value;
-  const size=document.getElementById("prodSize").value;
-  const res=await fetch(API_URL,{method:"POST",mode:"no-cors",body:JSON.stringify({action:"addProduct",product,category,size})});
+  const name=document.getElementById("categoryName").value.trim();
+  if(!name){ alert("Enter category name"); return; }
+  await fetch(API_URL,{
+    method:"POST", mode:"no-cors",
+    body: JSON.stringify({action:"addCategory", name})
+  });
+  document.getElementById("categoryName").value="";
   init();
 }
 
-// Load dealer rates
+async function addProduct(){
+  const product=document.getElementById("prodName").value.trim();
+  const category=document.getElementById("prodCategory").value;
+  const size=document.getElementById("prodSize").value.trim();
+  if(!product||!category||!size){ alert("Fill all fields"); return; }
+  await fetch(API_URL,{
+    method:"POST", mode:"no-cors",
+    body: JSON.stringify({action:"addProduct", product, category, size})
+  });
+  document.getElementById("prodName").value="";
+  document.getElementById("prodSize").value="";
+  init();
+}
+
+// Load dealer rates (GET)
 async function loadDealerRates(){
   const dealer=document.getElementById("dealerSelect").value;
+  if(!dealer){ alert("Select dealer"); return; }
   const res=await fetch(`${API_URL}?action=getDealerRates&dealer=${encodeURIComponent(dealer)}`);
   const d=await res.json();
-  if(!d.ok){alert("Error");return;}
+  if(!d.ok){ alert("Error loading dealer data"); return; }
   renderRatesTable(d);
   document.getElementById("ratesArea").style.display="block";
 }
+
 function renderRatesTable(data){
   const wrap=document.getElementById("ratesTable"); wrap.innerHTML="";
   const tbl=document.createElement("table");
@@ -83,7 +113,7 @@ function renderRatesTable(data){
   wrap.dataset.products=JSON.stringify(data.products);
 }
 
-// Save rates
+// Save rates (POST → no-cors → then re-fetch with GET)
 async function submitNewRates(){
   const dealer=document.getElementById("dealerSelect").value;
   const wef=document.getElementById("wefInput").value;
@@ -98,9 +128,12 @@ async function submitNewRates(){
       items.push({...p,rate:Number(rate),term});
     }
   });
-  const res=await fetch(API_URL,{method:"POST",mode:"no-cors",body:JSON.stringify({action:"saveRates",payload:{dealer,wefDate:wef,applyTerm,globalTerm,items}})});
+  await fetch(API_URL,{
+    method:"POST", mode:"no-cors",
+    body: JSON.stringify({action:"saveRates", payload:{dealer,wefDate:wef,applyTerm,globalTerm,items}})
+  });
   loadDealerRates();
 }
 
-// Init
+// Init on page load
 init();
