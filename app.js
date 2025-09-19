@@ -19,25 +19,19 @@ function fillOptions(id,arr){
 // Add dealer/category/product
 async function addDealer(){
   const name=document.getElementById("dealerName").value;
-  const res=await fetch(API_URL,{method:"POST",body:JSON.stringify({action:"addDealer",name})});
-  const d=await res.json();
-  document.getElementById("dealerMsg").textContent=d.message|| (d.created?"Added":"Exists");
+  const res=await fetch(API_URL,{method:"POST",mode:"no-cors",body:JSON.stringify({action:"addDealer",name})});
   init();
 }
 async function addCategory(){
   const name=document.getElementById("categoryName").value;
-  const res=await fetch(API_URL,{method:"POST",body:JSON.stringify({action:"addCategory",name})});
-  const d=await res.json();
-  document.getElementById("categoryMsg").textContent=d.message|| (d.created?"Added":"Exists");
+  const res=await fetch(API_URL,{method:"POST",mode:"no-cors",body:JSON.stringify({action:"addCategory",name})});
   init();
 }
 async function addProduct(){
   const product=document.getElementById("prodName").value;
   const category=document.getElementById("prodCategory").value;
   const size=document.getElementById("prodSize").value;
-  const res=await fetch(API_URL,{method:"POST",body:JSON.stringify({action:"addProduct",product,category,size})});
-  const d=await res.json();
-  document.getElementById("productMsg").textContent=d.message|| (d.created?"Added":"Exists");
+  const res=await fetch(API_URL,{method:"POST",mode:"no-cors",body:JSON.stringify({action:"addProduct",product,category,size})});
   init();
 }
 
@@ -104,9 +98,7 @@ async function submitNewRates(){
       items.push({...p,rate:Number(rate),term});
     }
   });
-  const res=await fetch(API_URL,{method:"POST",body:JSON.stringify({action:"saveRates",payload:{dealer,wefDate:wef,applyTerm,globalTerm,items}})});
-  const d=await res.json();
-  document.getElementById("saveMsg").textContent=`Saved ${d.inserted}, Skipped ${d.skipped}`;
+  const res=await fetch(API_URL,{method:"POST",mode:"no-cors",body:JSON.stringify({action:"saveRates",payload:{dealer,wefDate:wef,applyTerm,globalTerm,items}})});
   loadDealerRates();
 }
 
