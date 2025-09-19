@@ -1,5 +1,5 @@
 // Replace with your GAS WebApp URL
-const API_URL = "https://script.google.com/macros/s/AKfycb.../exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwlNW-se6IofauEr3rf-6_SmvH9o92r16_qltSz6Uj6HUKTsIBGHxsXtBRTxcMNuFw/exec";
 
 // Fetch initial data
 async function init(){
