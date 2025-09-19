@@ -30,10 +30,12 @@ function fillOptions(id,arr){
 async function addDealer(){
   const name=document.getElementById("dealerName").value.trim();
   if(!name){ alert("Enter dealer name"); return; }
-  await fetch(API_URL,{
-    method:"POST", mode:"no-cors",
-    body: JSON.stringify({action:"addDealer", name})
+  await fetch(API_URL, {
+    method: "POST", mode: "no-cors",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ action:"addDealer", name })
   });
+
   document.getElementById("dealerName").value="";
   init(); // refresh list
 }
@@ -41,10 +43,12 @@ async function addDealer(){
 async function addCategory(){
   const name=document.getElementById("categoryName").value.trim();
   if(!name){ alert("Enter category name"); return; }
-  await fetch(API_URL,{
-    method:"POST", mode:"no-cors",
-    body: JSON.stringify({action:"addCategory", name})
+  await fetch(API_URL, {
+    method: "POST", mode: "no-cors",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ action:"addCategory", name })
   });
+
   document.getElementById("categoryName").value="";
   init();
 }
@@ -54,8 +58,9 @@ async function addProduct(){
   const category=document.getElementById("prodCategory").value;
   const size=document.getElementById("prodSize").value.trim();
   if(!product||!category||!size){ alert("Fill all fields"); return; }
-  await fetch(API_URL,{
-    method:"POST", mode:"no-cors",
+  await fetch(API_URL, {
+    method: "POST", mode: "no-cors",
+    headers: {"Content-Type":"application/json"},
     body: JSON.stringify({action:"addProduct", product, category, size})
   });
   document.getElementById("prodName").value="";
