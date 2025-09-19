@@ -21,7 +21,6 @@ function showPageLoader(show){
   pl.classList.toggle('hide', !show);
 }
 function safeFetch(url, opts){
-  // Wrap fetch with a timeout for better UX on flaky networks
   const controller = new AbortController();
   const id = setTimeout(()=>controller.abort(), 20000);
   return fetch(url, {...opts, signal: controller.signal}).finally(()=>clearTimeout(id));
@@ -133,7 +132,6 @@ async function loadDealerRates(){
   }finally{ setLoading(btn, false); }
 }
 
-/* ------- Render table with split WEF columns (Rate | Payment Term) ------- */
 function renderRatesTable(data){
   const wrap = document.getElementById("ratesTable");
   wrap.innerHTML = "";
@@ -142,58 +140,51 @@ function renderRatesTable(data){
   const headTop = document.createElement('tr');
   const headSub = document.createElement('tr'); headSub.className='sub';
 
-  // Static headers (span two rows)
-  ;['Category','Product','Size'].forEach(text=>{
-    const th = document.createElement('th');
-    th.textContent = text; th.rowSpan = 2; headTop.appendChild(th);
+  ['Category','Product','Size'].forEach(text=>{
+    const th = document.createElement('th'); th.textContent = text; th.rowSpan=2; headTop.appendChild(th);
   });
 
-  // For each WEF date -> one group header (colspan=2) and subheaders Rate / Payment Term
-  (data.wefDates||[]).forEach(wef=>{
-    const thGroup = document.createElement('th');
-    thGroup.textContent = wef; thGroup.colSpan = 2; headTop.appendChild(thGroup);
+  const hasWef = Array.isArray(data.wefDates) && data.wefDates.length > 0;
+  if (hasWef) {
+    data.wefDates.forEach(wef=>{
+      const thGroup = document.createElement('th'); thGroup.textContent=wef; thGroup.colSpan=2; headTop.appendChild(thGroup);
+      const thRate=document.createElement('th'); thRate.textContent='Rate'; headSub.appendChild(thRate);
+      const thTerm=document.createElement('th'); thTerm.textContent='Payment Term'; headSub.appendChild(thTerm);
+    });
+  }
 
-    const thRate = document.createElement('th'); thRate.textContent = 'Rate'; headSub.appendChild(thRate);
-    const thTerm = document.createElement('th'); thTerm.textContent = 'Payment Term'; headSub.appendChild(thTerm);
-  });
+  const thNew=document.createElement('th'); thNew.textContent='New Rate'; thNew.rowSpan=2; headTop.appendChild(thNew);
+  const thItemTerm=document.createElement('th'); thItemTerm.textContent='Item Term'; thItemTerm.rowSpan=2; headTop.appendChild(thItemTerm);
 
-  // New inputs headers
-  const thNew = document.createElement('th'); thNew.textContent='New Rate'; thNew.rowSpan=2; headTop.appendChild(thNew);
-  const thItemTerm = document.createElement('th'); thItemTerm.textContent='Item Term'; thItemTerm.rowSpan=2; headTop.appendChild(thItemTerm);
+  thead.appendChild(headTop);
+  if(hasWef) thead.appendChild(headSub);
+  tbl.appendChild(thead);
 
-  thead.appendChild(headTop); thead.appendChild(headSub); tbl.appendChild(thead);
-
-  const tbody = document.createElement('tbody');
-
-  (data.products||[]).forEach((p, idx)=>{
-    const tr = document.createElement('tr');
-    [p.category, p.product, p.size].forEach(v=>{
-      const td = document.createElement('td'); td.textContent = v; tr.appendChild(td);
+  const tbody=document.createElement('tbody');
+  (data.products||[]).forEach((p,idx)=>{
+    const tr=document.createElement('tr');
+    [p.category,p.product,p.size].forEach(v=>{
+      const td=document.createElement('td'); td.textContent=v; tr.appendChild(td);
     });
 
-    (data.wefDates||[]).forEach(wef=>{
-      const key = `${p.product}||${p.category}||${p.size}`;
-      const cell = (data.rates && data.rates[wef] && data.rates[wef][key]) ? data.rates[wef][key] : null;
+    if(hasWef){
+      data.wefDates.forEach(wef=>{
+        const key=`${p.product}||${p.category}||${p.size}`;
+        const cell=data.rates?.[wef]?.[key];
+        const tdRate=document.createElement('td');
+        const tdTerm=document.createElement('td');
+        if(cell){ tdRate.textContent=cell.rate ?? '—'; tdTerm.textContent=cell.term?`${cell.term} d`:'—'; }
+        else{ tdRate.textContent='—'; tdTerm.textContent='—'; }
+        tr.appendChild(tdRate); tr.appendChild(tdTerm);
+      });
+    }
 
-      const tdRate = document.createElement('td');
-      const tdTerm = document.createElement('td');
-
-      if(cell){
-        tdRate.textContent = cell.rate ?? '—';
-        tdTerm.textContent = (cell.term ? `${cell.term} d` : '—');
-      }else{
-        tdRate.textContent = '—';
-        tdTerm.textContent = '—';
-      }
-      tr.appendChild(tdRate); tr.appendChild(tdTerm);
-    });
-
-    const tdNew = document.createElement('td');
-    tdNew.innerHTML = `<input type="number" id="rate_${idx}" inputmode="decimal" placeholder="0"/>`;
+    const tdNew=document.createElement('td');
+    tdNew.innerHTML=`<input type="number" id="rate_${idx}" inputmode="decimal" placeholder="0"/>`;
     tr.appendChild(tdNew);
 
-    const tdTerm = document.createElement('td');
-    tdTerm.innerHTML = `<select id="term_${idx}" disabled><option>15</option><option>30</option></select>`;
+    const tdTerm=document.createElement('td');
+    tdTerm.innerHTML=`<select id="term_${idx}" disabled><option>15</option><option>30</option></select>`;
     tr.appendChild(tdTerm);
 
     tbody.appendChild(tr);
@@ -202,51 +193,74 @@ function renderRatesTable(data){
   tbl.appendChild(tbody);
   wrap.appendChild(tbl);
 
-  document.getElementById("applyTerm").onchange = (e)=>{
-    const enable = e.target.value === "per-item";
-    (data.products||[]).forEach((_, i)=>{
-      const el = document.getElementById(`term_${i}`);
-      if(el) el.disabled = !enable;
+  if(!hasWef){
+    const banner=document.createElement('div');
+    banner.textContent="No previous rates found — you are entering first-time rates.";
+    banner.className="muted";
+    wrap.prepend(banner);
+  }
+
+  const applyTermEl=document.getElementById("applyTerm");
+  const globalTermEl=document.getElementById("termSelect");
+
+  applyTermEl.onchange=(e)=>{
+    const enable=e.target.value==="per-item";
+    const globalVal=globalTermEl.value;
+    (data.products||[]).forEach((_,i)=>{
+      const el=document.getElementById(`term_${i}`);
+      if(el){
+        el.disabled=!enable;
+        if(enable) el.value=globalVal; // prefill with global value when enabling
+      }
     });
   };
-  wrap.dataset.products = JSON.stringify(data.products||[]);
+
+  globalTermEl.onchange=(e)=>{
+    const globalVal=e.target.value;
+    if(applyTermEl.value==="all"){
+      (data.products||[]).forEach((_,i)=>{
+        const el=document.getElementById(`term_${i}`);
+        if(el) el.value=globalVal;
+      });
+    }
+  };
+
+  wrap.dataset.products=JSON.stringify(data.products||[]);
 }
 
-/* ---------------------- Save rates (POST) ----------------------- */
 async function submitNewRates(){
-  const dealer = document.getElementById("dealerSelect").value;
-  const wef = document.getElementById("wefInput").value;
-  const applyTerm = document.getElementById("applyTerm").value;
-  const globalTerm = document.getElementById("termSelect").value;
-  const products = JSON.parse(document.getElementById("ratesTable").dataset.products||"[]");
+  const dealer=document.getElementById("dealerSelect").value;
+  const wef=document.getElementById("wefInput").value;
+  const applyTerm=document.getElementById("applyTerm").value;
+  const globalTerm=document.getElementById("termSelect").value;
+  const products=JSON.parse(document.getElementById("ratesTable").dataset.products||"[]");
 
-  const btn = $('#saveRatesBtn');
-  const items = [];
+  const btn=$('#saveRatesBtn');
+  const items=[];
   products.forEach((p,i)=>{
-    const rateEl = document.getElementById(`rate_${i}`);
-    const rate = rateEl && rateEl.value ? Number(rateEl.value) : null;
-    if(rate !== null && !Number.isNaN(rate)){
-      const term = applyTerm === 'per-item' ? (document.getElementById(`term_${i}`).value) : null;
-      items.push({...p, rate, term});
+    const rateEl=document.getElementById(`rate_${i}`);
+    const rate=rateEl&&rateEl.value?Number(rateEl.value):null;
+    if(rate!==null&&!Number.isNaN(rate)){
+      const term=applyTerm==='per-item'?document.getElementById(`term_${i}`).value:null;
+      items.push({...p,rate,term});
     }
   });
 
-  if(!dealer){ return showToast('Select dealer','error'); }
-  if(!wef){ return showToast('Enter new W.E.F','error'); }
-  if(items.length===0){ return showToast('Enter at least one new rate','error'); }
+  if(!dealer) return showToast('Select dealer','error');
+  if(!wef) return showToast('Enter new W.E.F','error');
+  if(items.length===0) return showToast('Enter at least one new rate','error');
 
   try{
-    setLoading(btn, true);
-    await safeFetch(API_URL, {
-      method: "POST", mode: "no-cors",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ action:"saveRates", payload:{ dealer, wefDate: wef, applyTerm, globalTerm, items }})
+    setLoading(btn,true);
+    await safeFetch(API_URL,{
+      method:"POST",mode:"no-cors",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({action:"saveRates",payload:{dealer,wefDate:wef,applyTerm,globalTerm,items}})
     });
     showToast('Rates saved');
     loadDealerRates();
-  }catch(err){ showToast('Failed to save rates','error'); }
-  finally{ setLoading(btn, false); }
+  }catch(err){showToast('Failed to save rates','error');}
+  finally{setLoading(btn,false);}
 }
 
-// Init on page load
 init();
