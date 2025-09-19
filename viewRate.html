@@ -97,6 +97,9 @@
       background: #f1f5f9;
       font-weight: 600;
     }
+    .filter-bar {
+      margin-top: 10px;
+    }
     .muted {
       text-align: center;
       font-size: 13px;
@@ -110,6 +113,12 @@
     <h1>Dealer Rate Viewer</h1>
     <select id="dealerSelect"></select>
     <button id="fetchBtn" onclick="loadDealerRates()">Fetch Rates</button>
+
+    <!-- Category filter appears only after data is loaded -->
+    <div class="filter-bar" id="categoryFilterBar" style="display:none;">
+      <select id="categoryFilter" onchange="filterByCategory()"></select>
+    </div>
+
     <div class="spinner" id="loader"></div>
     <div id="tableArea" class="table-wrapper"></div>
     <p id="noData" class="muted" style="display:none;">No rates found for this dealer.</p>
@@ -118,6 +127,8 @@
   <script>
     const API_URL =
       "https://script.google.com/macros/s/AKfycbyaIUmvKpAp1h7moft2bBKiYQDulSOyw6TJ6blf0gP97qC78yTvAGPHeXfGsgEb8oX-/exec";
+
+    let dealerData = null; // store last fetched data for filtering
 
     async function init() {
       try {
@@ -151,6 +162,7 @@
       const tableArea = document.getElementById("tableArea");
       tableArea.innerHTML = "";
       document.getElementById("noData").style.display = "none";
+      document.getElementById("categoryFilterBar").style.display = "none";
       loader.classList.add("show");
       try {
         const res = await fetch(
@@ -158,8 +170,9 @@
             dealer
           )}`
         );
-        const d = await res.json();
-        renderRatesTable(d);
+        dealerData = await res.json();
+        renderRatesTable(dealerData);
+        buildCategoryFilter(dealerData.products);
       } catch (err) {
         alert("Error fetching rates");
       } finally {
@@ -167,8 +180,37 @@
       }
     }
 
+    function buildCategoryFilter(products) {
+      if (!products || products.length === 0) return;
+      const categories = [...new Set(products.map((p) => p.category))];
+      const sel = document.getElementById("categoryFilter");
+      sel.innerHTML = "";
+      const allOpt = document.createElement("option");
+      allOpt.value = "";
+      allOpt.textContent = "All Categories";
+      sel.appendChild(allOpt);
+      categories.forEach((c) => {
+        const o = document.createElement("option");
+        o.value = c;
+        o.textContent = c;
+        sel.appendChild(o);
+      });
+      document.getElementById("categoryFilterBar").style.display = "block";
+    }
+
+    function filterByCategory() {
+      if (!dealerData) return;
+      const selectedCat = document.getElementById("categoryFilter").value;
+      let filteredData = { ...dealerData };
+      filteredData.products = selectedCat
+        ? dealerData.products.filter((p) => p.category === selectedCat)
+        : dealerData.products;
+      renderRatesTable(filteredData);
+    }
+
     function renderRatesTable(data) {
       const tableArea = document.getElementById("tableArea");
+      tableArea.innerHTML = "";
       if (!data.ok || !data.products || data.products.length === 0) {
         document.getElementById("noData").style.display = "block";
         return;
