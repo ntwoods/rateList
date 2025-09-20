@@ -133,8 +133,11 @@ async function loadDealerRates(){
 }
 
 function renderRatesTable(data){
-  const wrap = document.getElementById("ratesTable");
-  wrap.innerHTML = "";
+  const wrap=document.getElementById("ratesTable");
+  wrap.innerHTML="";
+  if(Array.isArray(data.wefDates)){
+    data.wefDates.sort((a,b)=>new Date(a)-new Date(b)); // ✅ Sort ascending
+  }
   const tbl = document.createElement("table");
   const thead = document.createElement('thead');
   const headTop = document.createElement('tr');
