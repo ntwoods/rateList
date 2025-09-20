@@ -6,7 +6,7 @@
   <title>Rate List Portal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
@@ -18,24 +18,16 @@
       <h2>Add Dealer</h2>
       <div class="form-row">
         <input id="dealerName" placeholder="Dealer name"/>
-        <button id="dealerAddBtn" class="btn" onclick="addDealer()">
-          <span class="btn__label">Add</span>
-          <span class="btn__spinner" aria-hidden="true"></span>
-        </button>
+        <button id="dealerAddBtn" class="btn"><span class="btn__label">Add</span><span class="btn__spinner"></span></button>
       </div>
-      <p id="dealerMsg" class="muted"></p>
     </section>
 
     <section>
       <h2>Add Category</h2>
       <div class="form-row">
         <input id="categoryName" placeholder="Category name"/>
-        <button id="categoryAddBtn" class="btn" onclick="addCategory()">
-          <span class="btn__label">Add</span>
-          <span class="btn__spinner" aria-hidden="true"></span>
-        </button>
+        <button id="categoryAddBtn" class="btn"><span class="btn__label">Add</span><span class="btn__spinner"></span></button>
       </div>
-      <p id="categoryMsg" class="muted"></p>
     </section>
 
     <section>
@@ -44,22 +36,15 @@
         <input id="prodName" placeholder="Product name"/>
         <input id="prodSize" placeholder="Size"/>
         <select id="prodCategory"></select>
-        <button id="productAddBtn" class="btn" onclick="addProduct()">
-          <span class="btn__label">Add</span>
-          <span class="btn__spinner" aria-hidden="true"></span>
-        </button>
+        <button id="productAddBtn" class="btn"><span class="btn__label">Add</span><span class="btn__spinner"></span></button>
       </div>
-      <p id="productMsg" class="muted"></p>
     </section>
 
     <section>
-      <h2>Save New Rates</h2>
+      <h2>View & Save Rates</h2>
       <div class="form-row wrap">
         <select id="dealerSelect"></select>
-        <button id="getDataBtn" class="btn" onclick="loadDealerRates()">
-          <span class="btn__label">Fetch Data</span>
-          <span class="btn__spinner" aria-hidden="true"></span>
-        </button>
+        <button id="getDataBtn" class="btn"><span class="btn__label">Fetch Data</span><span class="btn__spinner"></span></button>
       </div>
 
       <div id="ratesArea" class="hide">
@@ -77,22 +62,13 @@
           <div id="ratesTable"></div>
         </div>
 
-        <button id="saveRatesBtn" class="btn primary" onclick="submitNewRates()">
-          <span class="btn__label">Save</span>
-          <span class="btn__spinner" aria-hidden="true"></span>
-        </button>
-        <p id="saveMsg" class="muted"></p>
+        <button id="saveRatesBtn" class="btn primary"><span class="btn__label">Save</span><span class="btn__spinner"></span></button>
       </div>
     </section>
   </div>
 
-  <!-- Page loader (for first init) -->
-  <div id="pageLoader" class="page-loader hide" aria-hidden="true">
-    <div class="spinner-xl"></div>
-  </div>
-
-  <!-- Centered toast -->
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="pageLoader" class="page-loader hide"><div class="spinner-xl"></div></div>
+  <div id="toast" class="toast"></div>
 
   <script src="app.js"></script>
 </body>
