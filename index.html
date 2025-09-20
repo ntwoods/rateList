@@ -6,7 +6,7 @@
   <title>Rate List Portal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
@@ -23,6 +23,7 @@
           <span class="btn__spinner" aria-hidden="true"></span>
         </button>
       </div>
+      <p id="dealerMsg" class="muted"></p>
     </section>
 
     <section>
@@ -34,6 +35,7 @@
           <span class="btn__spinner" aria-hidden="true"></span>
         </button>
       </div>
+      <p id="categoryMsg" class="muted"></p>
     </section>
 
     <section>
@@ -47,10 +49,11 @@
           <span class="btn__spinner" aria-hidden="true"></span>
         </button>
       </div>
+      <p id="productMsg" class="muted"></p>
     </section>
 
     <section>
-      <h2>View & Save Rates</h2>
+      <h2>Save New Rates</h2>
       <div class="form-row wrap">
         <select id="dealerSelect"></select>
         <button id="getDataBtn" class="btn" onclick="loadDealerRates()">
@@ -60,7 +63,7 @@
       </div>
 
       <div id="ratesArea" class="hide">
-        <div class="form-row wrap gap compact-controls">
+        <div class="form-row wrap gap">
           <label>New W.E.F: <input type="date" id="wefInput"/></label>
           <label>Payment Term:
             <select id="termSelect"><option value="15">15</option><option value="30">30</option></select>
@@ -70,7 +73,7 @@
           </label>
         </div>
 
-        <div class="table-wrapper compact">
+        <div class="table-wrapper">
           <div id="ratesTable"></div>
         </div>
 
@@ -78,13 +81,17 @@
           <span class="btn__label">Save</span>
           <span class="btn__spinner" aria-hidden="true"></span>
         </button>
+        <p id="saveMsg" class="muted"></p>
       </div>
     </section>
   </div>
 
+  <!-- Page loader (for first init) -->
   <div id="pageLoader" class="page-loader hide" aria-hidden="true">
     <div class="spinner-xl"></div>
   </div>
+
+  <!-- Centered toast -->
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="app.js"></script>
