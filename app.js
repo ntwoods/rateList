@@ -138,13 +138,19 @@ function renderRatesTable(data){
   if(Array.isArray(data.wefDates)){
     data.wefDates.sort((a,b)=>new Date(a)-new Date(b)); // ✅ Sort ascending
   }
+  
   const tbl = document.createElement("table");
   const thead = document.createElement('thead');
   const headTop = document.createElement('tr');
   const headSub = document.createElement('tr'); headSub.className='sub';
 
-  ['Category','Product','Size'].forEach(text=>{
-    const th = document.createElement('th'); th.textContent = text; th.rowSpan=2; headTop.appendChild(th);
+  // frozen headers
+  ['Category','Product','Size'].forEach((text, i)=>{
+    const th = document.createElement('th');
+    th.textContent = text;
+    th.rowSpan = 2;
+    th.className = `sticky-col col-${i}`;
+    headTop.appendChild(th);
   });
 
   const hasWef = Array.isArray(data.wefDates) && data.wefDates.length > 0;
@@ -166,8 +172,11 @@ function renderRatesTable(data){
   const tbody=document.createElement('tbody');
   (data.products||[]).forEach((p,idx)=>{
     const tr=document.createElement('tr');
-    [p.category,p.product,p.size].forEach(v=>{
-      const td=document.createElement('td'); td.textContent=v; tr.appendChild(td);
+    [p.category,p.product,p.size].forEach((v,i)=>{
+      const td = document.createElement('td');
+      td.textContent = v;
+      td.className = `sticky-col col-${i}`;
+      tr.appendChild(td);
     });
 
     if(hasWef){
