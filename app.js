@@ -35,6 +35,7 @@ async function init(){
     if(!data.ok){ throw new Error('Initial data not ok'); }
     fillOptions("dealerSelect", data.dealers);
     fillOptions("prodCategory", data.categories);
+    // data.brands is available if you want to show somewhere later
   }catch(err){
     console.error(err);
     showToast("Error loading data", 'error');
@@ -45,6 +46,7 @@ async function init(){
 
 function fillOptions(id, arr){
   const sel = document.getElementById(id);
+  if(!sel) return;
   sel.innerHTML = "";
   const def = document.createElement("option");
   def.value = ""; def.textContent = "-- select --";
@@ -55,7 +57,7 @@ function fillOptions(id, arr){
   });
 }
 
-/* ---------------- Add dealer/category/product (POST) ------------- */
+/* --------------------- Add dealer/category/product/brand (POST) -------------------- */
 async function addDealer(){
   const btn = $('#dealerAddBtn');
   const name = document.getElementById("dealerName").value.trim();
@@ -90,6 +92,25 @@ async function addCategory(){
     showToast('Category added');
     init();
   }catch(err){ showToast('Failed to add category','error'); }
+  finally{ setLoading(btn, false); }
+}
+
+async function addBrand(){ // NEW
+  const btn = $('#brandAddBtn');
+  const name = document.getElementById("brandName").value.trim();
+  if(!name){ return showToast('Enter brand name','error'); }
+  try{
+    setLoading(btn, true);
+    await safeFetch(API_URL, {
+      method: "POST", mode: "no-cors",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ action:"addBrand", name })
+    });
+    document.getElementById("brandName").value="";
+    showToast('Brand added');
+    // Optionally re-fetch; not required elsewhere right now
+    // init();
+  }catch(err){ showToast('Failed to add brand','error'); }
   finally{ setLoading(btn, false); }
 }
 
@@ -147,14 +168,16 @@ function renderRatesTable(data){
   const hasWef = Array.isArray(data.wefDates) && data.wefDates.length > 0;
   if (hasWef) {
     data.wefDates.forEach(wef=>{
-      const thGroup = document.createElement('th'); thGroup.textContent=wef; thGroup.colSpan=2; headTop.appendChild(thGroup);
+      const thGroup = document.createElement('th'); thGroup.textContent=wef; thGroup.colSpan=3; headTop.appendChild(thGroup);
       const thRate=document.createElement('th'); thRate.textContent='Rate'; headSub.appendChild(thRate);
       const thTerm=document.createElement('th'); thTerm.textContent='Payment Term'; headSub.appendChild(thTerm);
+      const thBrand=document.createElement('th'); thBrand.textContent='Brand'; headSub.appendChild(thBrand);
     });
   }
 
   const thNew=document.createElement('th'); thNew.textContent='New Rate'; thNew.rowSpan=2; headTop.appendChild(thNew);
   const thItemTerm=document.createElement('th'); thItemTerm.textContent='Item Term'; thItemTerm.rowSpan=2; headTop.appendChild(thItemTerm);
+  const thItemBrand=document.createElement('th'); thItemBrand.textContent='New Brand (optional)'; thItemBrand.rowSpan=2; headTop.appendChild(thItemBrand);
 
   thead.appendChild(headTop);
   if(hasWef) thead.appendChild(headSub);
@@ -173,9 +196,17 @@ function renderRatesTable(data){
         const cell=data.rates?.[wef]?.[key];
         const tdRate=document.createElement('td');
         const tdTerm=document.createElement('td');
-        if(cell){ tdRate.textContent=cell.rate ?? '—'; tdTerm.textContent=cell.term?`${cell.term} d`:'—'; }
-        else{ tdRate.textContent='—'; tdTerm.textContent='—'; }
-        tr.appendChild(tdRate); tr.appendChild(tdTerm);
+        const tdBrand=document.createElement('td');
+        if(cell){
+          tdRate.textContent = (cell.rate ?? '') !== '' ? cell.rate : '—';
+          tdTerm.textContent = cell.term ? `${cell.term} d` : '—';
+          tdBrand.textContent = cell.brand ? cell.brand : '—';
+        }else{
+          tdRate.textContent='—';
+          tdTerm.textContent='—';
+          tdBrand.textContent='—';
+        }
+        tr.appendChild(tdRate); tr.appendChild(tdTerm); tr.appendChild(tdBrand);
       });
     }
 
@@ -186,6 +217,10 @@ function renderRatesTable(data){
     const tdTerm=document.createElement('td');
     tdTerm.innerHTML=`<select id="term_${idx}" disabled><option>15</option><option>30</option></select>`;
     tr.appendChild(tdTerm);
+
+    const tdBrand=document.createElement('td');
+    tdBrand.innerHTML=`<input type="text" id="brand_${idx}" placeholder="Brand (optional)"/>`;
+    tr.appendChild(tdBrand);
 
     tbody.appendChild(tr);
   });
@@ -242,7 +277,9 @@ async function submitNewRates(){
     const rate=rateEl&&rateEl.value?Number(rateEl.value):null;
     if(rate!==null&&!Number.isNaN(rate)){
       const term=applyTerm==='per-item'?document.getElementById(`term_${i}`).value:null;
-      items.push({...p,rate,term});
+      const brandEl=document.getElementById(`brand_${i}`);
+      const brand = brandEl && brandEl.value ? brandEl.value.trim() : "";
+      items.push({...p,rate,term,brand});
     }
   });
 
