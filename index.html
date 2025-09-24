@@ -13,7 +13,7 @@
   <div class="container">
     <h1>Rate List Portal</h1>
 
-    <!-- Quick actions -->
+    <!-- Add Dealer -->
     <section>
       <h2>Add Dealer</h2>
       <div class="form-row">
@@ -26,6 +26,7 @@
       <p id="dealerMsg" class="muted"></p>
     </section>
 
+    <!-- Add Category -->
     <section>
       <h2>Add Category</h2>
       <div class="form-row">
@@ -38,6 +39,20 @@
       <p id="categoryMsg" class="muted"></p>
     </section>
 
+    <!-- Add Brand (NEW) -->
+    <section>
+      <h2>Add Brand</h2>
+      <div class="form-row">
+        <input id="brandName" placeholder="Brand name"/>
+        <button id="brandAddBtn" class="btn" onclick="addBrand()">
+          <span class="btn__label">Add</span>
+          <span class="btn__spinner" aria-hidden="true"></span>
+        </button>
+      </div>
+      <p id="brandMsg" class="muted"></p>
+    </section>
+
+    <!-- Add Product -->
     <section>
       <h2>Add Product</h2>
       <div class="form-grid">
@@ -52,6 +67,7 @@
       <p id="productMsg" class="muted"></p>
     </section>
 
+    <!-- Save New Rates -->
     <section>
       <h2>Save New Rates</h2>
       <div class="form-row wrap">
@@ -86,7 +102,7 @@
     </section>
   </div>
 
-  <!-- Page loader (for first init) -->
+  <!-- Page loader -->
   <div id="pageLoader" class="page-loader hide" aria-hidden="true">
     <div class="spinner-xl"></div>
   </div>
