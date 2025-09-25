@@ -39,7 +39,7 @@
       <p id="categoryMsg" class="muted"></p>
     </section>
 
-    <!-- Add Brand (NEW) -->
+    <!-- Add Brand -->
     <section>
       <h2>Add Brand</h2>
       <div class="form-row">
@@ -81,26 +81,33 @@
       <div id="ratesArea" class="hide">
         <div class="form-row wrap gap">
           <label>New W.E.F: <input type="date" id="wefInput"/></label>
+
           <label>Payment Term:
-            <select id="termSelect"><option value="15">15</option><option value="30">30</option></select>
+            <select id="termSelect">
+              <option value="15">15</option>
+              <option value="30">30</option>
+            </select>
           </label>
           <label>Apply Term:
-            <select id="applyTerm"><option value="all">All</option><option value="per-item">Per Item</option></select>
+            <select id="applyTerm">
+              <option value="all">All</option>
+              <option value="per-item">Per Item</option>
+            </select>
+          </label>
+
+          <label>GST Type:
+            <select id="gstGlobal">
+              <option value="Paid">Paid</option>
+              <option value="Extra">Extra</option>
+            </select>
+          </label>
+          <label>Apply GST:
+            <select id="applyGst">
+              <option value="all">All</option>
+              <option value="per-item">Per Item</option>
+            </select>
           </label>
         </div>
-        <label>GST Type:
-          <select id="gstSelect">
-            <option value="Paid">Paid</option>
-            <option value="Extra">Extra</option>
-          </select>
-        </label>
-        <label>Apply GST:
-          <select id="applyGst">
-            <option value="all">All</option>
-            <option value="per-item">Per Item</option>
-          </select>
-        </label>
-        
 
         <div class="table-wrapper">
           <div id="ratesTable"></div>
