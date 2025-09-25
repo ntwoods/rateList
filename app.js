@@ -35,7 +35,7 @@ async function init(){
     if(!data.ok){ throw new Error('Initial data not ok'); }
     fillOptions("dealerSelect", data.dealers);
     fillOptions("prodCategory", data.categories);
-    // data.brands is available if you want to show somewhere later
+    // data.brands available if needed later
   }catch(err){
     console.error(err);
     showToast("Error loading data", 'error');
@@ -43,7 +43,6 @@ async function init(){
     showPageLoader(false);
   }
 }
-
 function fillOptions(id, arr){
   const sel = document.getElementById(id);
   if(!sel) return;
@@ -95,7 +94,7 @@ async function addCategory(){
   finally{ setLoading(btn, false); }
 }
 
-async function addBrand(){ // NEW
+async function addBrand(){ // existing
   const btn = $('#brandAddBtn');
   const name = document.getElementById("brandName").value.trim();
   if(!name){ return showToast('Enter brand name','error'); }
@@ -108,8 +107,6 @@ async function addBrand(){ // NEW
     });
     document.getElementById("brandName").value="";
     showToast('Brand added');
-    // Optionally re-fetch; not required elsewhere right now
-    // init();
   }catch(err){ showToast('Failed to add brand','error'); }
   finally{ setLoading(btn, false); }
 }
@@ -145,6 +142,10 @@ async function loadDealerRates(){
     const res = await safeFetch(`${API_URL}?action=getDealerRates&dealer=${encodeURIComponent(dealer)}`);
     const d = await res.json();
     if(!d.ok){ throw new Error('Dealer data not ok'); }
+    // Sort WEF ascending as requested
+    if (Array.isArray(d.wefDates)) {
+      d.wefDates = d.wefDates.filter(Boolean).sort((a,b)=>a.localeCompare(b));
+    }
     renderRatesTable(d);
     document.getElementById("ratesArea").classList.remove('hide');
     showToast('Data loaded');
@@ -153,6 +154,7 @@ async function loadDealerRates(){
   }finally{ setLoading(btn, false); }
 }
 
+/* ------------------------- Render table -------------------------- */
 function renderRatesTable(data){
   const wrap = document.getElementById("ratesTable");
   wrap.innerHTML = "";
@@ -168,16 +170,18 @@ function renderRatesTable(data){
   const hasWef = Array.isArray(data.wefDates) && data.wefDates.length > 0;
   if (hasWef) {
     data.wefDates.forEach(wef=>{
-      const thGroup = document.createElement('th'); thGroup.textContent=wef; thGroup.colSpan=3; headTop.appendChild(thGroup);
+      const thGroup = document.createElement('th'); thGroup.textContent=wef; thGroup.colSpan=4; headTop.appendChild(thGroup);
       const thRate=document.createElement('th'); thRate.textContent='Rate'; headSub.appendChild(thRate);
       const thTerm=document.createElement('th'); thTerm.textContent='Payment Term'; headSub.appendChild(thTerm);
       const thBrand=document.createElement('th'); thBrand.textContent='Brand'; headSub.appendChild(thBrand);
+      const thGst=document.createElement('th'); thGst.textContent='GST Type'; headSub.appendChild(thGst);
     });
   }
 
   const thNew=document.createElement('th'); thNew.textContent='New Rate'; thNew.rowSpan=2; headTop.appendChild(thNew);
   const thItemTerm=document.createElement('th'); thItemTerm.textContent='Item Term'; thItemTerm.rowSpan=2; headTop.appendChild(thItemTerm);
   const thItemBrand=document.createElement('th'); thItemBrand.textContent='New Brand (optional)'; thItemBrand.rowSpan=2; headTop.appendChild(thItemBrand);
+  const thItemGst=document.createElement('th'); thItemGst.textContent='GST Type'; thItemGst.rowSpan=2; headTop.appendChild(thItemGst);
 
   thead.appendChild(headTop);
   if(hasWef) thead.appendChild(headSub);
@@ -197,16 +201,19 @@ function renderRatesTable(data){
         const tdRate=document.createElement('td');
         const tdTerm=document.createElement('td');
         const tdBrand=document.createElement('td');
+        const tdGst=document.createElement('td');
         if(cell){
           tdRate.textContent = (cell.rate ?? '') !== '' ? cell.rate : '—';
           tdTerm.textContent = cell.term ? `${cell.term} d` : '—';
           tdBrand.textContent = cell.brand ? cell.brand : '—';
+          tdGst.textContent  = cell.gstType ? cell.gstType : '—';
         }else{
           tdRate.textContent='—';
           tdTerm.textContent='—';
           tdBrand.textContent='—';
+          tdGst.textContent='—';
         }
-        tr.appendChild(tdRate); tr.appendChild(tdTerm); tr.appendChild(tdBrand);
+        tr.appendChild(tdRate); tr.appendChild(tdTerm); tr.appendChild(tdBrand); tr.appendChild(tdGst);
       });
     }
 
@@ -222,12 +229,20 @@ function renderRatesTable(data){
     tdBrand.innerHTML=`<input type="text" id="brand_${idx}" placeholder="Brand (optional)"/>`;
     tr.appendChild(tdBrand);
 
+    const tdGst=document.createElement('td');
+    tdGst.innerHTML=`<select id="gst_${idx}" disabled>
+                       <option value="Paid">Paid</option>
+                       <option value="Extra">Extra</option>
+                     </select>`;
+    tr.appendChild(tdGst);
+
     tbody.appendChild(tr);
   });
 
   tbl.appendChild(tbody);
   wrap.appendChild(tbl);
 
+  // Show banner if no historical WEF found
   if(!hasWef){
     const banner=document.createElement('div');
     banner.textContent="No previous rates found — you are entering first-time rates.";
@@ -235,8 +250,11 @@ function renderRatesTable(data){
     wrap.prepend(banner);
   }
 
+  // Toggle per-item enablement mirrors Payment Term logic, now for GST too
   const applyTermEl=document.getElementById("applyTerm");
   const globalTermEl=document.getElementById("termSelect");
+  const applyGstEl=document.getElementById("applyGst");
+  const globalGstEl=document.getElementById("gstGlobal");
 
   applyTermEl.onchange=(e)=>{
     const enable=e.target.value==="per-item";
@@ -245,14 +263,13 @@ function renderRatesTable(data){
       const el=document.getElementById(`term_${i}`);
       if(el){
         el.disabled=!enable;
-        if(enable) el.value=globalVal; // prefill with global value when enabling
+        if(!enable) el.value=globalVal;
       }
     });
   };
-
   globalTermEl.onchange=(e)=>{
     const globalVal=e.target.value;
-    if(applyTermEl.value==="all"){
+    if(document.getElementById("applyTerm").value==="all"){
       (data.products||[]).forEach((_,i)=>{
         const el=document.getElementById(`term_${i}`);
         if(el) el.value=globalVal;
@@ -260,6 +277,28 @@ function renderRatesTable(data){
     }
   };
 
+  applyGstEl.onchange=(e)=>{
+    const enable=e.target.value==="per-item";
+    const globalVal=globalGstEl.value;
+    (data.products||[]).forEach((_,i)=>{
+      const el=document.getElementById(`gst_${i}`);
+      if(el){
+        el.disabled=!enable;
+        if(!enable) el.value=globalVal;
+      }
+    });
+  };
+  globalGstEl.onchange=(e)=>{
+    const globalVal=e.target.value;
+    if(document.getElementById("applyGst").value==="all"){
+      (data.products||[]).forEach((_,i)=>{
+        const el=document.getElementById(`gst_${i}`);
+        if(el) el.value=globalVal;
+      });
+    }
+  };
+
+  // keep products in dataset for submit
   wrap.dataset.products=JSON.stringify(data.products||[]);
 }
 
@@ -268,6 +307,8 @@ async function submitNewRates(){
   const wef=document.getElementById("wefInput").value;
   const applyTerm=document.getElementById("applyTerm").value;
   const globalTerm=document.getElementById("termSelect").value;
+  const applyGst=document.getElementById("applyGst").value;
+  const globalGst=document.getElementById("gstGlobal").value;
   const products=JSON.parse(document.getElementById("ratesTable").dataset.products||"[]");
 
   const btn=$('#saveRatesBtn');
@@ -279,7 +320,9 @@ async function submitNewRates(){
       const term=applyTerm==='per-item'?document.getElementById(`term_${i}`).value:null;
       const brandEl=document.getElementById(`brand_${i}`);
       const brand = brandEl && brandEl.value ? brandEl.value.trim() : "";
-      items.push({...p,rate,term,brand});
+      const gstEl=document.getElementById(`gst_${i}`);
+      const gstType = applyGst==='per-item' && gstEl ? gstEl.value : null;
+      items.push({...p,rate,term,brand,gstType});
     }
   });
 
@@ -292,7 +335,10 @@ async function submitNewRates(){
     await safeFetch(API_URL,{
       method:"POST",mode:"no-cors",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({action:"saveRates",payload:{dealer,wefDate:wef,applyTerm,globalTerm,items}})
+      body:JSON.stringify({
+        action:"saveRates",
+        payload:{dealer,wefDate:wef,applyTerm,globalTerm,applyGst,globalGst,items}
+      })
     });
     showToast('Rates saved');
     loadDealerRates();
