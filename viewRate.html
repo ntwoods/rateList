@@ -1,279 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dealer Rate Viewer</title>
-  <style>
-    :root {
-      --bg: #f7faff;
-      --surface: #fff;
-      --border: #e2e8f0;
-      --brand: #2563eb;
-      --ink: #0f172a;
-      --muted: #475569;
-      --shadow: rgba(37, 99, 235, 0.08);
-    }
-    body {
-      margin: 0;
-      font-family: "Poppins", sans-serif;
-      background: var(--bg);
-      padding: 12px;
-      color: var(--ink);
-    }
-    .card {
-      background: var(--surface);
-      border-radius: 16px;
-      box-shadow: 0 6px 18px var(--shadow);
-      border: 1px solid var(--border);
-      padding: 16px;
-      margin-bottom: 16px;
-    }
-    h1 {
-      font-size: 22px;
-      font-weight: 600;
-      color: var(--brand);
-      margin: 0 0 12px;
-      text-align: center;
-    }
-    select,
-    button {
-      width: 100%;
-      padding: 10px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      font-size: 15px;
-    }
-    button {
-      background: var(--brand);
-      color: #fff;
-      font-weight: 600;
-      margin-top: 8px;
-      cursor: pointer;
-      transition: background 0.2s ease;
-    }
-    button:disabled {
-      opacity: 0.7;
-      cursor: not-allowed;
-    }
-    button:hover:not(:disabled) {
-      background: #1e40af;
-    }
-    .spinner {
-      display: none;
-      margin: 8px auto;
-      border: 3px solid #e2e8f0;
-      border-top-color: var(--brand);
-      border-radius: 50%;
-      width: 28px;
-      height: 28px;
-      animation: spin 1s linear infinite;
-    }
-    .spinner.show {
-      display: block;
-    }
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
-    }
-    .table-wrapper {
-      overflow-x: auto;
-      margin-top: 12px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 14px;
-    }
-    th,
-    td {
-      border: 1px solid var(--border);
-      padding: 6px 8px;
-      text-align: left;
-      white-space: nowrap;
-    }
-    thead th {
-      background: #f1f5f9;
-      font-weight: 600;
-    }
-    .filter-bar {
-      margin-top: 10px;
-    }
-    .muted {
-      text-align: center;
-      font-size: 13px;
-      color: var(--muted);
-      margin-top: 10px;
-    }
-  </style>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>View Rates</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
-  <div class="card">
-    <h1>Dealer Rate Viewer</h1>
-    <select id="dealerSelect"></select>
-    <button id="fetchBtn" onclick="loadDealerRates()">Fetch Rates</button>
+  <div class="container">
+    <h1>View Rates</h1>
 
-    <!-- Category filter appears only after data is loaded -->
-    <div class="filter-bar" id="categoryFilterBar" style="display:none;">
-      <select id="categoryFilter" onchange="filterByCategory()"></select>
-    </div>
+    <!-- Dealer selection -->
+    <section>
+      <h2>Select Dealer</h2>
+      <div class="form-row wrap">
+        <input id="dealerSelect" list="dealersList" placeholder="Search dealer… (e.g., sal)"/>
+        <datalist id="dealersList"></datalist>
+        <button id="getDataBtn" class="btn" onclick="loadDealerRates()">
+          <span class="btn__label">View Rates</span>
+          <span class="btn__spinner" aria-hidden="true"></span>
+        </button>
+      </div>
+    </section>
 
-    <div class="spinner" id="loader"></div>
-    <div id="tableArea" class="table-wrapper"></div>
-    <p id="noData" class="muted" style="display:none;">No rates found for this dealer.</p>
+    <!-- Rates Area -->
+    <section id="ratesArea" class="hide">
+      <!-- Filters -->
+      <div class="form-row wrap gap" id="filterRow" style="margin-top:10px;">
+        <label>Filter Category:
+          <select id="filterCategory">
+            <option value="">All</option>
+          </select>
+        </label>
+        <label>Filter Product:
+          <select id="filterProduct">
+            <option value="">All</option>
+          </select>
+        </label>
+      </div>
+
+      <!-- Desktop table -->
+      <div class="table-wrapper" id="ratesTableWrap">
+        <div id="ratesTable"></div>
+      </div>
+
+      <!-- Mobile cards -->
+      <div id="ratesCards" class="cards-wrapper hide"></div>
+    </section>
   </div>
 
-  <script>
-    const API_URL =
-      "https://script.google.com/macros/s/AKfycbyaIUmvKpAp1h7moft2bBKiYQDulSOyw6TJ6blf0gP97qC78yTvAGPHeXfGsgEb8oX-/exec";
+  <!-- Page loader -->
+  <div id="pageLoader" class="page-loader hide" aria-hidden="true">
+    <div class="spinner-xl"></div>
+  </div>
 
-    let dealerData = null; // store last fetched data for filtering
+  <!-- Centered toast -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    async function init() {
-      try {
-        const res = await fetch(`${API_URL}?action=getInitialData`);
-        const data = await res.json();
-        fillOptions("dealerSelect", data.dealers || []);
-      } catch (e) {
-        alert("Error loading dealers");
-      }
-    }
-
-    function fillOptions(id, arr) {
-      const sel = document.getElementById(id);
-      sel.innerHTML = "";
-      const def = document.createElement("option");
-      def.value = "";
-      def.textContent = "-- Select Dealer --";
-      sel.appendChild(def);
-      arr.forEach((v) => {
-        const o = document.createElement("option");
-        o.value = v;
-        o.textContent = v;
-        sel.appendChild(o);
-      });
-    }
-
-    async function loadDealerRates() {
-      const dealer = document.getElementById("dealerSelect").value;
-      if (!dealer) return alert("Please select a dealer");
-      const loader = document.getElementById("loader");
-      const tableArea = document.getElementById("tableArea");
-      tableArea.innerHTML = "";
-      document.getElementById("noData").style.display = "none";
-      document.getElementById("categoryFilterBar").style.display = "none";
-      loader.classList.add("show");
-      try {
-        const res = await fetch(
-          `${API_URL}?action=getDealerRates&dealer=${encodeURIComponent(
-            dealer
-          )}`
-        );
-        dealerData = await res.json();
-        renderRatesTable(dealerData);
-        buildCategoryFilter(dealerData.products);
-      } catch (err) {
-        alert("Error fetching rates");
-      } finally {
-        loader.classList.remove("show");
-      }
-    }
-
-    function buildCategoryFilter(products) {
-      if (!products || products.length === 0) return;
-      const categories = [...new Set(products.map((p) => p.category))];
-      const sel = document.getElementById("categoryFilter");
-      sel.innerHTML = "";
-      const allOpt = document.createElement("option");
-      allOpt.value = "";
-      allOpt.textContent = "All Categories";
-      sel.appendChild(allOpt);
-      categories.forEach((c) => {
-        const o = document.createElement("option");
-        o.value = c;
-        o.textContent = c;
-        sel.appendChild(o);
-      });
-      document.getElementById("categoryFilterBar").style.display = "block";
-    }
-
-    function filterByCategory() {
-      if (!dealerData) return;
-      const selectedCat = document.getElementById("categoryFilter").value;
-      let filteredData = { ...dealerData };
-      filteredData.products = selectedCat
-        ? dealerData.products.filter((p) => p.category === selectedCat)
-        : dealerData.products;
-      renderRatesTable(filteredData);
-    }
-
-    function renderRatesTable(data) {
-      const tableArea = document.getElementById("tableArea");
-      tableArea.innerHTML = "";
-      if (!data.ok || !data.products || data.products.length === 0) {
-        document.getElementById("noData").style.display = "block";
-        return;
-      }
-
-      const tbl = document.createElement("table");
-      const thead = document.createElement("thead");
-      const trTop = document.createElement("tr");
-      const trSub = document.createElement("tr");
-
-      ["Category", "Product", "Size"].forEach((h) => {
-        const th = document.createElement("th");
-        th.textContent = h;
-        th.rowSpan = 2;
-        trTop.appendChild(th);
-      });
-
-      (data.wefDates || []).forEach((wef) => {
-        const thGroup = document.createElement("th");
-        thGroup.colSpan = 2;
-        thGroup.textContent = wef;
-        trTop.appendChild(thGroup);
-
-        const thRate = document.createElement("th");
-        thRate.textContent = "Rate";
-        trSub.appendChild(thRate);
-
-        const thTerm = document.createElement("th");
-        thTerm.textContent = "Payment Term";
-        trSub.appendChild(thTerm);
-      });
-
-      thead.appendChild(trTop);
-      if ((data.wefDates || []).length > 0) thead.appendChild(trSub);
-      tbl.appendChild(thead);
-
-      const tbody = document.createElement("tbody");
-      data.products.forEach((p) => {
-        const tr = document.createElement("tr");
-        [p.category, p.product, p.size].forEach((v) => {
-          const td = document.createElement("td");
-          td.textContent = v;
-          tr.appendChild(td);
-        });
-
-        (data.wefDates || []).forEach((wef) => {
-          const key = `${p.product}||${p.category}||${p.size}`;
-          const cell = data.rates?.[wef]?.[key];
-          const tdRate = document.createElement("td");
-          const tdTerm = document.createElement("td");
-          tdRate.textContent = cell?.rate ?? "—";
-          tdTerm.textContent = cell?.term ? `${cell.term} d` : "—";
-          tr.appendChild(tdRate);
-          tr.appendChild(tdTerm);
-        });
-        tbody.appendChild(tr);
-      });
-
-      tbl.appendChild(tbody);
-      tableArea.appendChild(tbl);
-    }
-
-    init();
-  </script>
+  <script src="app.js"></script>
 </body>
 </html>
