@@ -241,6 +241,28 @@ function renderRatesTable(data){
                        <option value="Extra">Extra</option>
                      </select>`;
     tr.appendChild(tdGst);
+    const tdFreight=document.createElement('td');
+    tdFreight.innerHTML=`<select id="freight_${idx}" disabled>
+      <option value="Extra">Extra</option>
+      <option value="Half">Half</option>
+      <option value="FOR">FOR</option>
+    </select>`;
+    tr.appendChild(tdFreight);
+    
+    const tdCd=document.createElement('td');
+    tdCd.innerHTML=`<select id="cd_${idx}" disabled>
+      <option value="Net Rates">Net Rates</option>
+      <option value="CD Included">CD Included</option>
+    </select>
+    <input type="text" id="cdval_${idx}" placeholder="CD%" style="width:60px;display:none"/>`;
+    tr.appendChild(tdCd);
+    
+    // Toggle CD value box visibility
+    tdCd.querySelector(`#cd_${idx}`).onchange=(e)=>{
+      tdCd.querySelector(`#cdval_${idx}`).style.display = e.target.value==="CD Included" ? "inline-block" : "none";
+    };
+
+    
 
     tbody.appendChild(tr);
   });
@@ -262,6 +284,47 @@ function renderRatesTable(data){
   const applyGstEl=document.getElementById("applyGst");
   const globalGstEl=document.getElementById("gstGlobal");
 
+  const applyFreightEl=$("#applyFreight");
+  const globalFreightEl=$("#freightGlobal");
+  applyFreightEl.onchange=(e)=>{
+    const enable=e.target.value==="per-item";
+    const globalVal=globalFreightEl.value;
+    (data.products||[]).forEach((_,i)=>{
+      const el=document.getElementById(`freight_${i}`);
+      if(el){ el.disabled=!enable; if(!enable) el.value=globalVal; }
+    });
+  };
+  globalFreightEl.onchange=(e)=>{
+    const globalVal=e.target.value;
+    if($("#applyFreight").value==="all"){
+      (data.products||[]).forEach((_,i)=>{
+        const el=document.getElementById(`freight_${i}`);
+        if(el) el.value=globalVal;
+      });
+    }
+  };
+  
+  const applyCdEl=$("#applyCd");
+  const globalCdEl=$("#cdGlobal");
+  applyCdEl.onchange=(e)=>{
+    const enable=e.target.value==="per-item";
+    const globalVal=globalCdEl.value;
+    (data.products||[]).forEach((_,i)=>{
+      const el=document.getElementById(`cd_${i}`);
+      if(el){ el.disabled=!enable; if(!enable) el.value=globalVal; }
+    });
+  };
+  globalCdEl.onchange=(e)=>{
+    const globalVal=e.target.value;
+    if($("#applyCd").value==="all"){
+      (data.products||[]).forEach((_,i)=>{
+        const el=document.getElementById(`cd_${i}`);
+        if(el) el.value=globalVal;
+      });
+    }
+  };
+  
+  
   applyTermEl.onchange=(e)=>{
     const enable=e.target.value==="per-item";
     const globalVal=globalTermEl.value;
@@ -316,7 +379,10 @@ async function submitNewRates(){
   const applyGst=document.getElementById("applyGst").value;
   const globalGst=document.getElementById("gstGlobal").value;
   const products=JSON.parse(document.getElementById("ratesTable").dataset.products||"[]");
-
+  const applyFreight=$("#applyFreight").value;
+  const globalFreight=$("#freightGlobal").value;
+  const applyCd=$("#applyCd").value;
+  const globalCd=$("#cdGlobal").value;
   const btn=$('#saveRatesBtn');
   const items=[];
   products.forEach((p,i)=>{
@@ -328,7 +394,11 @@ async function submitNewRates(){
       const brand = brandEl && brandEl.value ? brandEl.value.trim() : "";
       const gstEl=document.getElementById(`gst_${i}`);
       const gstType = applyGst==='per-item' && gstEl ? gstEl.value : null;
-      items.push({...p,rate,term,brand,gstType});
+      const freight = applyFreight==='per-item' ? document.getElementById(`freight_${i}`).value : null;
+      const cdType = applyCd==='per-item' ? document.getElementById(`cd_${i}`).value : null;
+      const cdValue = cdType==="CD Included" ? document.getElementById(`cdval_${i}`).value : "";
+      items.push({...p, rate, term, brand, gstType, freight, cdType, cdValue});
+
     }
   });
 
@@ -343,7 +413,7 @@ async function submitNewRates(){
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
         action:"saveRates",
-        payload:{dealer,wefDate:wef,applyTerm,globalTerm,applyGst,globalGst,items}
+        payload:{dealer,wefDate:wef,applyTerm,globalTerm,applyGst,globalGst,applyFreight,globalFreight,applyCd,globalCd,items}
       })
     });
     showToast('Rates saved');
