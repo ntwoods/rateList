@@ -170,7 +170,7 @@ function renderRatesTable(data){
   const hasWef = Array.isArray(data.wefDates) && data.wefDates.length > 0;
   if (hasWef) {
     data.wefDates.forEach(wef=>{
-      const thGroup = document.createElement('th'); thGroup.textContent=wef; thGroup.colSpan=4; headTop.appendChild(thGroup);
+      const thGroup = document.createElement('th'); thGroup.textContent=wef; thGroup.colSpan=6; headTop.appendChild(thGroup);
       const thRate=document.createElement('th'); thRate.textContent='Rate'; headSub.appendChild(thRate);
       const thTerm=document.createElement('th'); thTerm.textContent='Payment Term'; headSub.appendChild(thTerm);
       const thBrand=document.createElement('th'); thBrand.textContent='Brand'; headSub.appendChild(thBrand);
@@ -209,6 +209,8 @@ function renderRatesTable(data){
         const tdTerm=document.createElement('td');
         const tdBrand=document.createElement('td');
         const tdGst=document.createElement('td');
+        const tdFre  = document.createElement('td'); 
+        const tdCd   = document.createElement('td'); 
         if(cell){
           tdRate.textContent = (cell.rate ?? '') !== '' ? cell.rate : '—';
           tdTerm.textContent = cell.term ? `${cell.term} d` : '—';
