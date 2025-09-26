@@ -174,10 +174,76 @@ function renderRatesView(data){
     $('#ratesTableWrap')?.classList.add('hide');
     $('#ratesCards')?.classList.remove('hide');
     renderCards(data);
+    // Populate filter dropdowns
+    const catSel = $('#filterCategory');
+    const prodSel = $('#filterProduct');
+    if(catSel && prodSel){
+      // Reset
+      catSel.innerHTML = '<option value="">All</option>';
+      prodSel.innerHTML = '<option value="">All</option>';
+    
+      const cats = [...new Set((data.products||[]).map(p=>p.category))];
+      const prods = [...new Set((data.products||[]).map(p=>p.product))];
+    
+      cats.forEach(c=>{
+        const o=document.createElement('option'); o.value=c; o.textContent=c; catSel.appendChild(o);
+      });
+      prods.forEach(p=>{
+        const o=document.createElement('option'); o.value=p; o.textContent=p; prodSel.appendChild(o);
+      });
+    
+      const applyFilters = ()=>{
+        const fCat = catSel.value;
+        const fProd = prodSel.value;
+        const cards = document.querySelectorAll('.product-card');
+        cards.forEach(card=>{
+          const cat = card.dataset.category;
+          const prod = card.dataset.product;
+          const show = (!fCat || fCat===cat) && (!fProd || fProd===prod);
+          card.style.display = show ? '' : 'none';
+        });
+      };
+      catSel.onchange = applyFilters;
+      prodSel.onchange = applyFilters;
+    }
+
   }else{
     $('#ratesCards')?.classList.add('hide');
     $('#ratesTableWrap')?.classList.remove('hide');
     renderTable(data);
+    // Populate filter dropdowns
+    const catSel = $('#filterCategory');
+    const prodSel = $('#filterProduct');
+    if(catSel && prodSel){
+      // Reset
+      catSel.innerHTML = '<option value="">All</option>';
+      prodSel.innerHTML = '<option value="">All</option>';
+    
+      const cats = [...new Set((data.products||[]).map(p=>p.category))];
+      const prods = [...new Set((data.products||[]).map(p=>p.product))];
+    
+      cats.forEach(c=>{
+        const o=document.createElement('option'); o.value=c; o.textContent=c; catSel.appendChild(o);
+      });
+      prods.forEach(p=>{
+        const o=document.createElement('option'); o.value=p; o.textContent=p; prodSel.appendChild(o);
+      });
+    
+      const applyFilters = ()=>{
+        const fCat = catSel.value;
+        const fProd = prodSel.value;
+        const cards = document.querySelectorAll('.product-card');
+        cards.forEach(card=>{
+          const cat = card.dataset.category;
+          const prod = card.dataset.product;
+          const show = (!fCat || fCat===cat) && (!fProd || fProd===prod);
+          card.style.display = show ? '' : 'none';
+        });
+      };
+      catSel.onchange = applyFilters;
+      prodSel.onchange = applyFilters;
+    }
+    
   }
 }
 
@@ -328,7 +394,8 @@ function renderCards(data){
   (data.products||[]).forEach((p, idx)=>{
     const card = document.createElement('div');
     card.className = 'product-card';
-
+    card.dataset.category = p.category;
+    card.dataset.product = p.product;
     // Header
     const header = document.createElement('div');
     header.className = 'product-header';
