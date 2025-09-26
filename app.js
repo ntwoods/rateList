@@ -175,6 +175,9 @@ function renderRatesTable(data){
       const thTerm=document.createElement('th'); thTerm.textContent='Payment Term'; headSub.appendChild(thTerm);
       const thBrand=document.createElement('th'); thBrand.textContent='Brand'; headSub.appendChild(thBrand);
       const thGst=document.createElement('th'); thGst.textContent='GST Type'; headSub.appendChild(thGst);
+      const thFreight=document.createElement('th'); thFreight.textContent='Freight'; headSub.appendChild(thFreight);
+      const thCd=document.createElement('th'); thCd.textContent='CD'; headSub.appendChild(thCd);
+
     });
   }
 
@@ -182,6 +185,9 @@ function renderRatesTable(data){
   const thItemTerm=document.createElement('th'); thItemTerm.textContent='Item Term'; thItemTerm.rowSpan=2; headTop.appendChild(thItemTerm);
   const thItemBrand=document.createElement('th'); thItemBrand.textContent='New Brand (optional)'; thItemBrand.rowSpan=2; headTop.appendChild(thItemBrand);
   const thItemGst=document.createElement('th'); thItemGst.textContent='GST Type'; thItemGst.rowSpan=2; headTop.appendChild(thItemGst);
+  const thFreight = document.createElement('th'); thFreight.textContent = 'Freight'; thFreight.rowSpan = 2; headTop.appendChild(thFreight);
+  const thCd = document.createElement('th'); thCd.textContent = 'CD'; thCd.rowSpan = 2; headTop.appendChild(thCd);
+
 
   thead.appendChild(headTop);
   if(hasWef) thead.appendChild(headSub);
