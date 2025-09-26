@@ -205,6 +205,7 @@ function renderRatesTable(data){
         const key=`${p.product}||${p.category}||${p.size}`;
         const cell=data.rates?.[wef]?.[key];
         const tdRate=document.createElement('td');
+        tdRate.classList.add("rate-col");        
         const tdTerm=document.createElement('td');
         const tdBrand=document.createElement('td');
         const tdGst=document.createElement('td');
