@@ -620,7 +620,7 @@ async function loadDealerRates(){
   }finally{ setLoading(btn, false); }
 }
 // re-render view (no refetch) when rotating/resizing
-window.addEventListener('orientationchange', ()=>{ if(__lastData) renderRatesView(__lastData); });
-window.addEventListener('resize', ()=>{ if(__lastData) renderRatesView(__lastData); });
+// window.addEventListener('orientationchange', ()=>{ if(__lastData) renderRatesView(__lastData); });
+// window.addEventListener('resize', ()=>{ if(__lastData) renderRatesView(__lastData); });
 
 init();
