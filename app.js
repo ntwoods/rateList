@@ -225,6 +225,7 @@ function renderRatesTable(data){
     }
 
     const tdNew=document.createElement('td');
+    tdNew.classList.add("rate-col");    
     tdNew.innerHTML=`<input type="number" id="rate_${idx}" inputmode="decimal" placeholder="0"/>`;
     tr.appendChild(tdNew);
 
