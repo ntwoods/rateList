@@ -70,8 +70,11 @@
     <!-- Save New Rates -->
     <section>
       <h2>Save New Rates</h2>
+
+      <!-- Dealer search with datalist -->
       <div class="form-row wrap">
-        <select id="dealerSelect"></select>
+        <input id="dealerSelect" list="dealersList" placeholder="Search dealer… (e.g., sal)"/>
+        <datalist id="dealersList"></datalist>
         <button id="getDataBtn" class="btn" onclick="loadDealerRates()">
           <span class="btn__label">Fetch Data</span>
           <span class="btn__spinner" aria-hidden="true"></span>
@@ -79,6 +82,7 @@
       </div>
 
       <div id="ratesArea" class="hide">
+        <!-- Global controls -->
         <div class="form-row wrap gap">
           <label>New W.E.F: <input type="date" id="wefInput"/></label>
 
@@ -107,38 +111,42 @@
               <option value="per-item">Per Item</option>
             </select>
           </label>
-        </div>
-        <label>Freight:
-          <select id="freightGlobal">
-            <option value="Extra">Extra</option>
-            <option value="Half">Half</option>
-            <option value="FOR">FOR</option>
-          </select>
-        </label>
-        <label>Apply Freight:
-          <select id="applyFreight">
-            <option value="all">All</option>
-            <option value="per-item">Per Item</option>
-          </select>
-        </label>
-        
-        <label>CD:
-          <select id="cdGlobal">
-            <option value="Net Rates">Net Rates</option>
-            <option value="CD Included">CD Included</option>
-          </select>
-        </label>
-        <label>Apply CD:
-          <select id="applyCd">
-            <option value="all">All</option>
-            <option value="per-item">Per Item</option>
-          </select>
-        </label>
-        
 
-        <div class="table-wrapper">
+          <label>Freight:
+            <select id="freightGlobal">
+              <option value="Extra">Extra</option>
+              <option value="Half">Half</option>
+              <option value="FOR">FOR</option>
+            </select>
+          </label>
+          <label>Apply Freight:
+            <select id="applyFreight">
+              <option value="all">All</option>
+              <option value="per-item">Per Item</option>
+            </select>
+          </label>
+
+          <label>CD:
+            <select id="cdGlobal">
+              <option value="Net Rates">Net Rates</option>
+              <option value="CD Included">CD Included</option>
+            </select>
+          </label>
+          <label>Apply CD:
+            <select id="applyCd">
+              <option value="all">All</option>
+              <option value="per-item">Per Item</option>
+            </select>
+          </label>
+        </div>
+
+        <!-- Desktop table -->
+        <div class="table-wrapper" id="ratesTableWrap">
           <div id="ratesTable"></div>
         </div>
+
+        <!-- Mobile cards -->
+        <div id="ratesCards" class="cards-wrapper hide"></div>
 
         <button id="saveRatesBtn" class="btn primary" onclick="submitNewRates()">
           <span class="btn__label">Save</span>
