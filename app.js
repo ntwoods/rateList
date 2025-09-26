@@ -361,7 +361,8 @@ function renderCards(data){
                 ? `${cell.cdType}${cell.cdValue ? ` (${cell.cdValue})` : ''}`
                 : cell.cdType)
             : '—';
-          line.textContent = `${wef} → Rate: ${cell.rate ?? '—'} | Term: ${cell.term ? cell.term+'d' : '—'} | Brand: ${cell.brand||'—'} | GST: ${cell.gstType||'—'} | Freight: ${cell.freight||'—'} | CD: ${cdTxt}`;
+        const rateVal = cell.rate ?? '—';
+        line.innerHTML = `${wef} → <span class="rate-highlight">Rate: ${rateVal}</span> | Term: ${cell.term ? cell.term+'d' : '—'} | Brand: ${cell.brand||'—'} | GST: ${cell.gstType||'—'} | Freight: ${cell.freight||'—'} | CD: ${cdTxt}`;
         }else{
           line.textContent = `${wef} → —`;
         }
