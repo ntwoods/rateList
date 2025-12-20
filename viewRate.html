@@ -42,19 +42,18 @@
         </label>
       </div>
 
-<!-- Hidden dummy globals (to satisfy app.js) -->
-<div style="display:none">
-  <select id="applyTerm"><option value="all">All</option></select>
-  <select id="termSelect"><option value="15">15</option></select>
-  <select id="applyGst"><option value="all">All</option></select>
-  <select id="gstGlobal"><option value="Paid">Paid</option></select>
-  <select id="applyFreight"><option value="all">All</option></select>
-  <select id="freightGlobal"><option value="Extra">Extra</option></select>
-  <select id="applyCd"><option value="all">All</option></select>
-  <select id="cdGlobal"><option value="Net Rates">Net Rates</option></select>
-</div>
+      <!-- Hidden dummy globals (to satisfy app.js) -->
+      <div style="display:none">
+        <select id="applyTerm"><option value="all">All</option></select>
+        <select id="termSelect"><option value="15">15</option></select>
+        <select id="applyGst"><option value="all">All</option></select>
+        <select id="gstGlobal"><option value="Paid">Paid</option></select>
+        <select id="applyFreight"><option value="all">All</option></select>
+        <select id="freightGlobal"><option value="Extra">Extra</option></select>
+        <select id="applyCd"><option value="all">All</option></select>
+        <select id="cdGlobal"><option value="Net Rates">Net Rates</option></select>
+      </div>
 
-      
       <!-- Desktop table -->
       <div class="table-wrapper" id="ratesTableWrap">
         <div id="ratesTable"></div>
@@ -73,6 +72,192 @@
   <!-- Centered toast -->
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <!-- Your existing JS -->
   <script src="viewRates.js"></script>
+
+  <!-- ✅ Filter Fix Layer (No changes required in viewRates.js) -->
+  <script>
+  (function(){
+    const $ = (id) => document.getElementById(id);
+
+    const toast = (msg, ms=2200) => {
+      const el = $("toast");
+      if(!el) return;
+      el.textContent = msg;
+      el.classList.add("show");
+      clearTimeout(el._t);
+      el._t = setTimeout(()=>el.classList.remove("show"), ms);
+    };
+
+    const norm = (v) => String(v ?? "").trim().toLowerCase();
+
+    function getTableInfo(){
+      const host = $("ratesTable");
+      if(!host) return null;
+      const table = host.querySelector("table");
+      if(!table) return null;
+
+      const headRow = table.querySelector("thead tr") || table.querySelector("tr");
+      if(!headRow) return { table, catIdx:-1, prodIdx:-1 };
+
+      const headers = Array.from(headRow.querySelectorAll("th,td")).map(x=>norm(x.textContent));
+      const findIdx = (keys) => headers.findIndex(h => keys.some(k => h === k || h.includes(k)));
+
+      const catIdx  = findIdx(["category","cat"]);
+      const prodIdx = findIdx(["product","item","material","name","product name","item name"]);
+      return { table, catIdx, prodIdx };
+    }
+
+    function getDataRows(table){
+      const tbody = table.querySelector("tbody");
+      let rows = tbody ? Array.from(tbody.querySelectorAll("tr")) : Array.from(table.querySelectorAll("tr"));
+      if(!tbody && rows.length) rows = rows.slice(1); // drop header
+      return rows;
+    }
+
+    function cellText(row, idx){
+      const cells = Array.from(row.querySelectorAll("td,th"));
+      return (cells[idx]?.textContent ?? "").trim();
+    }
+
+    function collectFromTable(){
+      const info = getTableInfo();
+      if(!info || info.catIdx < 0 || info.prodIdx < 0) return null;
+
+      const rows = getDataRows(info.table);
+      const all = rows.map(r => ({
+        row: r,
+        category: cellText(r, info.catIdx),
+        product: cellText(r, info.prodIdx),
+      })).filter(x => x.category || x.product);
+
+      return { info, all };
+    }
+
+    function fillCategories(dataset){
+      const sel = $("filterCategory");
+      if(!sel) return;
+      const cur = sel.value || "";
+      const cats = Array.from(new Set(dataset.map(x => x.category).filter(Boolean)))
+        .sort((a,b)=>a.localeCompare(b));
+
+      sel.innerHTML = '<option value="">All</option>' +
+        cats.map(c=>`<option value="${String(c).replaceAll('"','&quot;')}">${c}</option>`).join("");
+
+      if(cur && cats.includes(cur)) sel.value = cur;
+    }
+
+    function fillProducts(dataset){
+      const catSel = $("filterCategory");
+      const prodSel = $("filterProduct");
+      if(!prodSel) return;
+
+      const selectedCat = catSel?.value || "";
+      const base = selectedCat ? dataset.filter(x => norm(x.category) === norm(selectedCat)) : dataset;
+
+      const cur = prodSel.value || "";
+      const prods = Array.from(new Set(base.map(x => x.product).filter(Boolean)))
+        .sort((a,b)=>a.localeCompare(b));
+
+      prodSel.innerHTML = '<option value="">All</option>' +
+        prods.map(p=>`<option value="${String(p).replaceAll('"','&quot;')}">${p}</option>`).join("");
+
+      if(cur && prods.includes(cur)) prodSel.value = cur;
+      else if(cur) prodSel.value = "";
+    }
+
+    function applyTableFilters(dataset){
+      const cat = $("filterCategory")?.value || "";
+      const prod = $("filterProduct")?.value || "";
+
+      dataset.forEach(x => {
+        let ok = true;
+        if(cat) ok = ok && (norm(x.category) === norm(cat));
+        if(prod) ok = ok && (norm(x.product) === norm(prod));
+        x.row.style.display = ok ? "" : "none";
+      });
+    }
+
+    function applyCardFilters(){
+      const wrap = $("ratesCards");
+      if(!wrap) return;
+
+      const cards = Array.from(wrap.querySelectorAll(".rate-card, .card, [data-rate-card]"));
+      if(!cards.length) return;
+
+      const cat = $("filterCategory")?.value || "";
+      const prod = $("filterProduct")?.value || "";
+
+      const reCat = /category\s*[:\-]\s*([^\n]+)/i;
+      const reProd = /(product|item)\s*[:\-]\s*([^\n]+)/i;
+
+      cards.forEach(card => {
+        const t = card.textContent || "";
+        const mC = t.match(reCat);
+        const mP = t.match(reProd);
+        const cVal = (mC?.[1] || "").trim();
+        const pVal = (mP?.[2] || "").trim();
+
+        let ok = true;
+        if(cat && cVal) ok = ok && (norm(cVal) === norm(cat));
+        if(prod && pVal) ok = ok && (norm(pVal) === norm(prod));
+
+        card.style.display = ok ? "" : "none";
+      });
+    }
+
+    function rebuildAndApply(){
+      const collected = collectFromTable();
+      if(!collected) return;
+
+      const dataset = collected.all;
+      fillCategories(dataset);
+      fillProducts(dataset);
+      applyTableFilters(dataset);
+      applyCardFilters();
+    }
+
+    function bind(){
+      const catSel = $("filterCategory");
+      const prodSel = $("filterProduct");
+
+      if(catSel && !catSel.dataset.bound){
+        catSel.dataset.bound = "1";
+        catSel.addEventListener("change", () => rebuildAndApply());
+      }
+      if(prodSel && !prodSel.dataset.bound){
+        prodSel.dataset.bound = "1";
+        prodSel.addEventListener("change", () => rebuildAndApply());
+      }
+    }
+
+    function observeRenders(){
+      const t = $("ratesTable") || document.body;
+      const mo = new MutationObserver(() => {
+        bind();
+        rebuildAndApply();
+      });
+      mo.observe(t, { childList:true, subtree:true });
+
+      const cards = $("ratesCards");
+      if(cards) mo.observe(cards, { childList:true, subtree:true });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      bind();
+      observeRenders();
+
+      setTimeout(() => {
+        bind();
+        rebuildAndApply();
+
+        const info = getTableInfo();
+        if(info && (info.catIdx < 0 || info.prodIdx < 0)){
+          toast("Table header me 'Category'/'Product' match nahi ho raha. Header text check karo.");
+        }
+      }, 300);
+    });
+  })();
+  </script>
 </body>
 </html>
