@@ -232,12 +232,12 @@ function renderRatesView(data){
       const applyFilters = ()=>{
         const fCat = catSel.value;
         const fProd = prodSel.value;
-        const cards = document.querySelectorAll('.product-card');
-        cards.forEach(card=>{
-          const cat = card.dataset.category;
-          const prod = card.dataset.product;
+        const rows = document.querySelectorAll('#ratesTable table tbody tr');
+        rows.forEach(row=>{
+          const cat = row.dataset.category;
+          const prod = row.dataset.product;
           const show = (!fCat || fCat===cat) && (!fProd || fProd===prod);
-          card.style.display = show ? '' : 'none';
+          row.style.display = show ? '' : 'none';
         });
       };
       catSel.onchange = applyFilters;
@@ -278,7 +278,7 @@ function renderTable(data){
   const thItemBrand=document.createElement('th'); thItemBrand.textContent='New Brand (optional)'; thItemBrand.rowSpan=2; headTop.appendChild(thItemBrand);
   const thItemGst=document.createElement('th'); thItemGst.textContent='GST Type'; thItemGst.rowSpan=2; headTop.appendChild(thItemGst);
   const thItemFre=document.createElement('th'); thItemFre.textContent='Freight'; thItemFre.rowSpan=2; headTop.appendChild(thItemFre);
-  const thItemCd=document.createElement('th'); thItemCd.textContent='CD (+% if inc.)'; thItemCd.rowSpan=2; headTop.appendChild(thItemCd);
+  const thItemCd=document.createElement('th'); thItemCd.textContent='CD'; thItemCd.rowSpan=2; headTop.appendChild(thItemCd);
 
   thead.appendChild(headTop);
   if(hasWef) thead.appendChild(headSub);
@@ -287,6 +287,8 @@ function renderTable(data){
   const tbody=document.createElement('tbody');
   (data.products||[]).forEach((p,idx)=>{
     const tr=document.createElement('tr');
+    tr.dataset.category = p.category;
+    tr.dataset.product = p.product;
     [p.category,p.product,p.size].forEach(v=>{
       const td=document.createElement('td'); td.textContent=v; tr.appendChild(td);
     });
@@ -307,11 +309,8 @@ function renderTable(data){
           tdBrand.textContent = cell.brand ? cell.brand : '—';
           tdGst.textContent  = cell.gstType ? cell.gstType : '—';
           tdFre.textContent  = cell.freight || '—';
-          tdCd.textContent   = cell.cdType
-            ? (cell.cdType==="CD Included"
-                ? `${cell.cdType}${cell.cdValue ? ` (${cell.cdValue})` : ''}`
-                : cell.cdType)
-            : '—';
+          const cdDisp = (cell.cd ?? '').toString().trim();
+          tdCd.textContent   = cdDisp ? cdDisp : 'Net Rates';
         }else{
           tdRate.textContent='—';
           tdTerm.textContent='—';
@@ -346,27 +345,14 @@ function renderTable(data){
     tr.appendChild(tdGst);
 
     const tdFre=document.createElement('td');
-    tdFre.innerHTML=`<select id="freight_${idx}" disabled>
-                       <option value="Extra">Extra</option>
-                       <option value="Half">Half</option>
-                       <option value="FOR">FOR</option>
-                     </select>`;
+    tdFre.innerHTML=`<input type="text" id="freight_${idx}" list="freightList" placeholder="Freight" disabled/>`;
     tr.appendChild(tdFre);
 
     const tdCd=document.createElement('td');
-    tdCd.innerHTML=`<select id="cd_${idx}" disabled>
-                      <option value="Net Rates">Net Rates</option>
-                      <option value="CD Included">CD Included</option>
-                    </select>
-                    <input type="text" id="cdval_${idx}" placeholder="CD%" style="width:60px;display:none"/>`;
+    tdCd.innerHTML=`<input type="text" id="cd_${idx}" placeholder="CD (blank = Net Rates)" disabled/>`;
     tr.appendChild(tdCd);
 
-    // Toggle CD% field visibility
-    tdCd.querySelector(`#cd_${idx}`).onchange=(e)=>{
-      tdCd.querySelector(`#cdval_${idx}`).style.display = e.target.value==="CD Included" ? "inline-block" : "none";
-    };
-
-    tbody.appendChild(tr);
+tbody.appendChild(tr);
   });
 
   tbl.appendChild(tbody);
@@ -423,11 +409,8 @@ function renderCards(data){
         const line = document.createElement('div');
         line.className = 'past-item';
         if(cell){
-          const cdTxt = cell.cdType
-            ? (cell.cdType==="CD Included"
-                ? `${cell.cdType}${cell.cdValue ? ` (${cell.cdValue})` : ''}`
-                : cell.cdType)
-            : '—';
+          const cdTxtRaw = (cell.cd ?? '').toString().trim();
+          const cdTxt = cdTxtRaw ? cdTxtRaw : 'Net Rates';
         const rateVal = cell.rate ?? '—';
         line.innerHTML = `${wef} → <span class="rate-highlight">Rate: ${rateVal}</span> | Term: ${cell.term ? cell.term+'d' : '—'} | Brand: ${cell.brand||'—'} | GST: ${cell.gstType||'—'} | Freight: ${cell.freight||'—'} | CD: ${cdTxt}`;
         }else{
@@ -472,25 +455,20 @@ function renderCards(data){
     gstSel.innerHTML = `<option value="Paid">Paid</option><option value="Extra">Extra</option>`;
     fresh.appendChild(gstSel);
 
-    const freightSel = document.createElement('select');
-    freightSel.id = `freight_${idx}`;
-    freightSel.disabled = true;
-    freightSel.innerHTML = `<option value="Extra">Extra</option><option value="Half">Half</option><option value="FOR">FOR</option>`;
-    fresh.appendChild(freightSel);
+    const freightInput = document.createElement('input');
+    freightInput.type = 'text';
+    freightInput.placeholder = 'Freight';
+    freightInput.id = `freight_${idx}`;
+    freightInput.disabled = true;
+    freightInput.setAttribute('list','freightList');
+    fresh.appendChild(freightInput);
 
-    const cdWrap = document.createElement('div');
-    const cdSel = document.createElement('select');
-    cdSel.id = `cd_${idx}`;
-    cdSel.disabled = true;
-    cdSel.innerHTML = `<option value="Net Rates">Net Rates</option><option value="CD Included">CD Included</option>`;
-    const cdVal = document.createElement('input');
-    cdVal.type = 'text';
-    cdVal.placeholder = 'CD%';
-    cdVal.id = `cdval_${idx}`;
-    cdVal.style.display = 'none';
-    cdSel.onchange = (e)=>{ cdVal.style.display = e.target.value==="CD Included" ? "inline-block" : "none"; };
-    cdWrap.appendChild(cdSel); cdWrap.appendChild(cdVal);
-    fresh.appendChild(cdWrap);
+    const cdInput = document.createElement('input');
+    cdInput.type = 'text';
+    cdInput.placeholder = 'CD (blank = Net Rates)';
+    cdInput.id = `cd_${idx}`;
+    cdInput.disabled = true;
+    fresh.appendChild(cdInput);
 
     card.appendChild(fresh);
     cards.appendChild(card);
@@ -550,15 +528,22 @@ function wireGlobalToggles(data){
   };
 
   applyFreightEl.onchange=(e)=>{
-    const enable=e.target.value==="per-item";
-    const globalVal=globalFreightEl.value;
+    const enable = e.target.value==="per-item";
+    const globalVal = (globalFreightEl.value || "").trim();
     (products||[]).forEach((_,i)=>{
-      const el=document.getElementById(`freight_${i}`);
-      if(el){ el.disabled=!enable; if(!enable) el.value=globalVal; }
+      const el = document.getElementById(`freight_${i}`);
+      if(!el) return;
+      el.disabled = !enable;
+      if(!enable){
+        el.value = globalVal;
+      }else{
+        // don't overwrite user's per-item edits
+        if(!el.value) el.value = globalVal;
+      }
     });
   };
-  globalFreightEl.onchange=(e)=>{
-    const globalVal=e.target.value;
+  globalFreightEl.oninput=(e)=>{
+    const globalVal = (e.target.value || "").trim();
     if($("#applyFreight").value==="all"){
       (products||[]).forEach((_,i)=>{
         const el=document.getElementById(`freight_${i}`);
@@ -568,15 +553,21 @@ function wireGlobalToggles(data){
   };
 
   applyCdEl.onchange=(e)=>{
-    const enable=e.target.value==="per-item";
-    const globalVal=globalCdEl.value;
+    const enable = e.target.value==="per-item";
+    const globalVal = (globalCdEl.value || "").trim();
     (products||[]).forEach((_,i)=>{
-      const el=document.getElementById(`cd_${i}`);
-      if(el){ el.disabled=!enable; if(!enable) el.value=globalVal; }
+      const el = document.getElementById(`cd_${i}`);
+      if(!el) return;
+      el.disabled = !enable;
+      if(!enable){
+        el.value = globalVal;
+      }else{
+        if(!el.value) el.value = globalVal;
+      }
     });
   };
-  globalCdEl.onchange=(e)=>{
-    const globalVal=e.target.value;
+  globalCdEl.oninput=(e)=>{
+    const globalVal = (e.target.value || "").trim();
     if($("#applyCd").value==="all"){
       (products||[]).forEach((_,i)=>{
         const el=document.getElementById(`cd_${i}`);
@@ -601,9 +592,9 @@ async function submitNewRates(){
   const applyGst=document.getElementById("applyGst").value;
   const globalGst=document.getElementById("gstGlobal").value;
   const applyFreight=document.getElementById("applyFreight").value;
-  const globalFreight=document.getElementById("freightGlobal").value;
+  const globalFreight=(document.getElementById("freightGlobal").value||"").trim();
   const applyCd=document.getElementById("applyCd").value;
-  const globalCd=document.getElementById("cdGlobal").value;
+  const globalCd=(document.getElementById("cdGlobal").value||"").trim();
 
   const products=JSON.parse(document.getElementById("ratesTable").dataset.products||"[]");
   const btn=$('#saveRatesBtn');
@@ -619,14 +610,12 @@ async function submitNewRates(){
       const gstType = applyGst==='per-item' && gstEl ? gstEl.value : null;
 
       const frEl=document.getElementById(`freight_${i}`);
-      const freight = applyFreight==='per-item' && frEl ? frEl.value : null;
+      const freight = applyFreight==='per-item' && frEl ? (frEl.value||"").trim() : null;
 
-      const cdSel=document.getElementById(`cd_${i}`);
-      const cdType = applyCd==='per-item' && cdSel ? cdSel.value : null;
-      const cdVal=document.getElementById(`cdval_${i}`);
-      const cdValue = (applyCd==='per-item' && cdSel && cdSel.value==="CD Included" && cdVal) ? cdVal.value : "";
+      const cdEl=document.getElementById(`cd_${i}`);
+      const cdValue = applyCd==='per-item' && cdEl ? (cdEl.value||"").trim() : null;
 
-      items.push({...p,rate,term,brand,gstType,freight,cdType,cdValue});
+      items.push({...p,rate,term,brand,gstType,freight,cdValue});
     }
   });
 
