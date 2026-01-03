@@ -126,12 +126,13 @@
           </label>
 
           <label>Freight:
-            <select id="freightGlobal">
-              <option value="Extra">Extra</option>
-              <option value="Half">Half</option>
-              <option value="FOR">FOR</option>
-            </select>
+            <input id="freightGlobal" list="freightList" value="Extra" placeholder="e.g., Extra / Half / FOR"/>
           </label>
+          <datalist id="freightList">
+            <option value="Extra"></option>
+            <option value="Half"></option>
+            <option value="FOR"></option>
+          </datalist>
           <label>Apply Freight:
             <select id="applyFreight">
               <option value="all">All</option>
@@ -140,10 +141,7 @@
           </label>
 
           <label>CD:
-            <select id="cdGlobal">
-              <option value="Net Rates">Net Rates</option>
-              <option value="CD Included">CD Included</option>
-            </select>
+            <input id="cdGlobal" placeholder="CD value (blank = Net Rates)"/>
           </label>
           <label>Apply CD:
             <select id="applyCd">
