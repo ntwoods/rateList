@@ -11,7 +11,10 @@
 </head>
 <body>
   <div class="container">
-    <h1>View Rates</h1>
+    <div class="page-head">
+      <h1>View Rates</h1>
+      <div class="muted">Fast, compact view (Latest WEF by default). Expand history only when needed.</div>
+    </div>
 
     <!-- Dealer selection -->
     <section class="card">
@@ -27,21 +30,61 @@
 
     <!-- Rates Area -->
     <section id="ratesArea" class="hide">
-      <!-- Filters -->
-      <div class="form-row wrap gap" id="filterRow" style="margin-top:10px;">
-        <label>Filter Category:
-          <select id="filterCategory">
-            <option value="">All</option>
-          </select>
-        </label>
-        <label>Filter Product:
-          <select id="filterProduct">
-            <option value="">All</option>
-          </select>
-        </label>
+      <!-- Toolbar -->
+      <section class="card toolbar" style="margin-top:12px;">
+        <div class="form-row wrap gap">
+          <label>Category
+            <select id="filterCategory">
+              <option value="">All</option>
+            </select>
+          </label>
+
+          <label>Product
+            <select id="filterProduct">
+              <option value="">All</option>
+            </select>
+          </label>
+
+          <label>Search
+            <input id="searchInput" placeholder="Search product / size…" />
+          </label>
+
+          <label>WEF
+            <select id="filterWef">
+              <option value="latest">Latest only</option>
+              <option value="all">All history</option>
+            </select>
+          </label>
+
+          <label>View
+            <select id="viewMode">
+              <option value="compact" selected>Compact</option>
+              <option value="matrix">Matrix</option>
+            </select>
+          </label>
+
+          <div class="result-pill">
+            <span class="dot"></span>
+            <span id="resultCount">0</span>
+          </div>
+        </div>
+
+        <div class="hint">
+          Tip: <b>Compact</b> view shows latest WEF in big font; click <b>History</b> to expand older rates.
+          <span class="sep">•</span>
+          In Matrix view, use <b>WEF = Latest</b> to avoid horizontal scrolling.
+        </div>
+      </section>
+
+      <!-- Desktop table (Matrix view only) -->
+      <div class="table-wrapper hide" id="ratesTableWrap">
+        <div id="ratesTable"></div>
       </div>
 
-      <!-- Hidden dummy globals (safe to keep) -->
+      <!-- Cards (Compact view + Mobile fallback) -->
+      <div id="ratesCards" class="cards-wrapper"></div>
+
+      <!-- Hidden dummy globals (safe to keep for compatibility) -->
       <div style="display:none">
         <select id="applyTerm"><option value="all">All</option></select>
         <select id="termSelect"><option value="15">15</option></select>
@@ -54,14 +97,6 @@
         <select id="applyCd"><option value="all">All</option></select>
         <select id="cdGlobal"><option value="Net Rates">Net Rates</option></select>
       </div>
-
-      <!-- Desktop table -->
-      <div class="table-wrapper" id="ratesTableWrap">
-        <div id="ratesTable"></div>
-      </div>
-
-      <!-- Mobile cards -->
-      <div id="ratesCards" class="cards-wrapper hide"></div>
     </section>
   </div>
 
