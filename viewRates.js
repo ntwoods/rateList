@@ -61,6 +61,7 @@ let FILTERS_BOUND = false;
 let VIEW_MODE = "compact"; // compact | matrix
 let WEF_MODE = "latest";   // latest | all | yyyy-mm-dd
 let SEARCH_Q = "";
+let HIDE_NO_RATE = false;
 
 /* ========= Init: load dealers ========= */
 async function init() {
@@ -167,6 +168,21 @@ function bindFiltersOnce() {
     renderRatesView(getViewData());
     applyFilters();
   });
+
+  // Hide items with no rates (toggle)
+  const noRateBtn = $("#toggleNoRate");
+  if (noRateBtn) {
+    const sync = () => {
+      noRateBtn.classList.toggle("active", HIDE_NO_RATE);
+      noRateBtn.textContent = HIDE_NO_RATE ? "Show no-rate" : "Hide no-rate";
+    };
+    sync();
+    noRateBtn.addEventListener("click", () => {
+      HIDE_NO_RATE = !HIDE_NO_RATE;
+      sync();
+      applyFilters();
+    });
+  }
 }
 
 function fillCategoryOptions() {
@@ -255,7 +271,8 @@ function applyFilters() {
     const ok =
       (!cat || norm(card.dataset.category) === norm(cat)) &&
       (!prod || norm(card.dataset.product) === norm(prod)) &&
-      (!q || norm(card.dataset.search || "").includes(q));
+      (!q || norm(card.dataset.search || "").includes(q)) &&
+      (!HIDE_NO_RATE || card.dataset.hasRate === "1");
 
     card.style.display = ok ? "" : "none";
     if (ok) visible++;
@@ -275,7 +292,8 @@ function applyFilters() {
       const ok =
         (!cat || norm(rowCat) === norm(cat)) &&
         (!prod || norm(rowProd) === norm(prod)) &&
-        (!q || norm(hay).includes(q));
+        (!q || norm(hay).includes(q)) &&
+        (!HIDE_NO_RATE || tr.dataset.hasRate === "1");
 
       tr.style.display = ok ? "" : "none";
       if (ok) visible++;
@@ -290,20 +308,22 @@ function getViewData() {
   if (!LAST_DATA) return null;
 
   const all = Array.isArray(LAST_DATA.wefDates) ? LAST_DATA.wefDates : [];
-  if (!all.length) return LAST_DATA;
+  if (!all.length) return { ...LAST_DATA, _wefMode: "none", _wefAll: [] };
 
-  let wefDates = all;
+  // NOTE:
+  // - For Latest-only mode, we DO NOT shrink wefDates to one global date.
+  //   We compute latest WEF per-item from _wefAll, so items with older latest still show.
+  // - For All-history mode, we keep all dates.
+  // - For a specific WEF date, we show that one date only.
 
   if (WEF_MODE === "latest") {
-    wefDates = [all[all.length - 1]];
-  } else if (WEF_MODE === "all") {
-    wefDates = all;
-  } else {
-    // specific date
-    wefDates = [WEF_MODE];
+    return { ...LAST_DATA, wefDates: all, _wefMode: "latest", _wefAll: all };
   }
-
-  return { ...LAST_DATA, wefDates };
+  if (WEF_MODE === "all") {
+    return { ...LAST_DATA, wefDates: all, _wefMode: "all", _wefAll: all };
+  }
+  // specific date
+  return { ...LAST_DATA, wefDates: [WEF_MODE], _wefMode: "single", _wefAll: all, _selectedWef: WEF_MODE };
 }
 
 /* ========= Responsive renderer ========= */
@@ -320,7 +340,8 @@ function renderRatesView(data) {
   if (wantsMatrix) {
     $("#ratesTableWrap")?.classList.remove("hide");
     $("#ratesCards")?.classList.add("hide");
-    renderTable(data);
+    if (data._wefMode === "latest") renderTableLatest(data);
+    else renderTable(data);
   } else {
     $("#ratesTableWrap")?.classList.add("hide");
     $("#ratesCards")?.classList.remove("hide");
@@ -393,6 +414,27 @@ function pillsHtml(cell) {
   `;
 }
 
+
+/* ========= Rate discovery helpers ========= */
+function hasRateCell(cell) {
+  return !!(cell && !isBlank(cell.rate));
+}
+
+function listWefsWithRate(data, key) {
+  const all = Array.isArray(data._wefAll) ? data._wefAll : (Array.isArray(data.wefDates) ? data.wefDates : []);
+  return all.filter((wef) => hasRateCell(data.rates?.[wef]?.[key]));
+}
+
+function findLatestForKey(data, key) {
+  const all = Array.isArray(data._wefAll) ? data._wefAll : (Array.isArray(data.wefDates) ? data.wefDates : []);
+  for (let i = all.length - 1; i >= 0; i--) {
+    const wef = all[i];
+    const cell = data.rates?.[wef]?.[key];
+    if (hasRateCell(cell)) return { wef, cell };
+  }
+  return null;
+}
+
 /* ========= Cards (Compact) ========= */
 function renderCards(data) {
   const cards = $("#ratesCards");
@@ -402,13 +444,33 @@ function renderCards(data) {
   // grid on desktop
   cards.classList.toggle("product-grid", !isMobile());
 
-  const wefs = Array.isArray(data.wefDates) ? data.wefDates : [];
-  const hasWef = wefs.length > 0;
-  const currentWef = hasWef ? wefs[wefs.length - 1] : "";
+  const viewWefs = Array.isArray(data.wefDates) ? data.wefDates : [];
+  const allWefs = Array.isArray(data._wefAll) ? data._wefAll : viewWefs;
 
   (data.products || []).forEach((p) => {
     const key = `${p.product}||${p.category}||${p.size}`;
-    const currentCell = currentWef ? data.rates?.[currentWef]?.[key] : null;
+
+    // hasRate must be computed across ALL dates (so Hide no-rate works even on specific WEF view)
+    const wefsWithRate = listWefsWithRate({ ...data, _wefAll: allWefs }, key);
+    const hasAnyRate = wefsWithRate.length > 0;
+
+    // Determine which cell/date to show in the main card
+    let showWef = "";
+    let showCell = null;
+    let modeLabel = "Latest";
+
+    if (data._wefMode === "single") {
+      // show only the selected WEF, but still keep hasAnyRate from full history
+      showWef = (data._selectedWef || viewWefs[0] || "").trim();
+      showCell = showWef ? data.rates?.[showWef]?.[key] : null;
+      modeLabel = showWef ? "Selected" : "No rates";
+    } else {
+      // latest/all: show per-item latest WEF (this is what you asked for)
+      const latest = findLatestForKey({ ...data, _wefAll: allWefs }, key);
+      showWef = latest?.wef || "";
+      showCell = latest?.cell || null;
+      modeLabel = showWef ? "Latest" : "No rates";
+    }
 
     const card = document.createElement("div");
     card.className = "product-card";
@@ -416,6 +478,7 @@ function renderCards(data) {
     card.dataset.product = p.product || "";
     card.dataset.size = p.size || "";
     card.dataset.search = `${p.category || ""} ${p.product || ""} ${p.size || ""}`;
+    card.dataset.hasRate = hasAnyRate ? "1" : "0";
 
     const header = document.createElement("div");
     header.className = "product-header";
@@ -424,38 +487,37 @@ function renderCards(data) {
         <div class="product-title">${escHtml(p.product || "")}</div>
         <div class="product-meta">${escHtml(p.category || "")} • ${escHtml(p.size || "")}</div>
       </div>
-      <div class="badge">${currentWef ? `WEF ${escHtml(currentWef)}` : "WEF —"}</div>
+      <div class="badge">${showWef ? `WEF ${escHtml(showWef)}` : "WEF —"}</div>
     `;
     card.appendChild(header);
 
     // current block
     const current = document.createElement("div");
     current.className = "current";
-    const rateText = currentCell ? pickText(currentCell.rate, "—") : "—";
+    const rateText = showCell ? pickText(showCell.rate, "—") : "—";
     current.innerHTML = `
       <div class="current-top">
         <div class="${rateText === "—" ? "rate-empty" : "rate-big"}">${escHtml(rateText)}</div>
-        <div class="muted">${currentWef ? `Latest` : "No rates"}</div>
+        <div class="muted">${escHtml(modeLabel)}</div>
       </div>
-      ${pillsHtml(currentCell)}
+      ${pillsHtml(showCell)}
     `;
     card.appendChild(current);
 
-    // history
-    if (hasWef && wefs.length > 1) {
-      const details = document.createElement("details");
-      details.className = "history";
-      details.innerHTML = `<summary>History (${wefs.length - 1})</summary>`;
+    // History:
+    // - In latest/all mode, show other WEFs where rate exists for this item
+    // - In single mode, keep history hidden to match "only that WEF" view
+    if (data._wefMode !== "single" && hasAnyRate) {
+      const others = wefsWithRate.filter((d) => d !== showWef).slice().reverse(); // newest first
+      if (others.length) {
+        const details = document.createElement("details");
+        details.className = "history";
+        details.innerHTML = `<summary>History (${others.length})</summary>`;
 
-      const body = document.createElement("div");
-      body.className = "history-body";
+        const body = document.createElement("div");
+        body.className = "history-body";
 
-      // show older WEFs (latest excluded) reverse so newest first
-      wefs
-        .slice(0, -1)
-        .slice()
-        .reverse()
-        .forEach((wef) => {
+        others.forEach((wef) => {
           const cell = data.rates?.[wef]?.[key];
           const row = document.createElement("div");
           row.className = "history-row";
@@ -466,8 +528,9 @@ function renderCards(data) {
           body.appendChild(row);
         });
 
-      details.appendChild(body);
-      card.appendChild(details);
+        details.appendChild(body);
+        card.appendChild(details);
+      }
     }
 
     cards.appendChild(card);
@@ -532,6 +595,74 @@ function renderTable(data) {
   tbl.appendChild(tbody);
   wrap.appendChild(tbl);
 }
+
+
+/* ========= Table (Latest per-item) ========= */
+function cellStackHtmlWithWef(wef, cell) {
+  if (!cell) return `<div class="cell-stack"><div class="cell-line"><span class="cell-key">WEF</span><span class="cell-val">—</span></div><div class="cell-empty">—</div></div>`;
+  return `
+    <div class="cell-stack">
+      <div class="cell-line"><span class="cell-key">WEF</span><span class="cell-val">${escHtml(wef || "—")}</span></div>
+      ${cellStackHtml(cell)}
+    </div>
+  `;
+}
+
+function renderTableLatest(data) {
+  const wrap = $("#ratesTable");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+
+  const tbl = document.createElement("table");
+  const thead = document.createElement("thead");
+  const trh = document.createElement("tr");
+
+  ["Category", "Product", "Size", "Latest"].forEach((h) => {
+    const th = document.createElement("th");
+    th.textContent = h;
+    trh.appendChild(th);
+  });
+
+  thead.appendChild(trh);
+  tbl.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  const allWefs = Array.isArray(data._wefAll) ? data._wefAll : (Array.isArray(data.wefDates) ? data.wefDates : []);
+
+  (data.products || []).forEach((p) => {
+    const tr = document.createElement("tr");
+
+    // used by Hide no-rate toggle (computed across ALL WEFs)
+    const keyAny = `${p.product}||${p.category}||${p.size}`;
+    const hasAnyRate = allWefs.some((w) => hasRateCell(data.rates?.[w]?.[keyAny]));
+    tr.dataset.hasRate = hasAnyRate ? "1" : "0";
+
+    const tdCat = document.createElement("td");
+    tdCat.textContent = p.category || "";
+    tr.appendChild(tdCat);
+
+    const tdProd = document.createElement("td");
+    tdProd.textContent = p.product || "";
+    tr.appendChild(tdProd);
+
+    const tdSize = document.createElement("td");
+    tdSize.textContent = p.size || "";
+    tr.appendChild(tdSize);
+
+    const td = document.createElement("td");
+    td.className = "wef-cell";
+
+    const latest = findLatestForKey({ ...data, _wefAll: allWefs }, keyAny);
+    td.innerHTML = cellStackHtmlWithWef(latest?.wef || "", latest?.cell || null);
+
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  });
+
+  tbl.appendChild(tbody);
+  wrap.appendChild(tbl);
+}
+
 
 /* ========= Resize: re-render ========= */
 window.addEventListener(
