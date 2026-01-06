@@ -5,6 +5,16 @@ const API_URL = "https://script.google.com/macros/s/AKfycbyaIUmvKpAp1h7moft2bBKi
 const $ = (sel) => document.querySelector(sel);
 const norm = (v) => String(v ?? "").trim().toLowerCase();
 
+function escHtml(v) {
+  const s = String(v ?? "");
+  return s
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function showToast(msg, type = "success") {
   const t = $("#toast");
   if (!t) return;
@@ -39,9 +49,18 @@ function debounce(fn, ms = 200) {
   };
 }
 
+function isBlank(v) {
+  return v === null || v === undefined || String(v).trim() === "";
+}
+
 /* ========= State ========= */
 let LAST_DATA = null;
 let FILTERS_BOUND = false;
+
+// UI state
+let VIEW_MODE = "compact"; // compact | matrix
+let WEF_MODE = "latest";   // latest | all | yyyy-mm-dd
+let SEARCH_Q = "";
 
 /* ========= Init: load dealers ========= */
 async function init() {
@@ -85,9 +104,18 @@ async function loadDealerRates() {
     if (!d.ok) throw new Error("Bad dealer data");
 
     LAST_DATA = d;
+
+    // default: latest WEF + compact
+    VIEW_MODE = $("#viewMode")?.value || "compact";
+    WEF_MODE = $("#filterWef")?.value || "latest";
+
     $("#ratesArea")?.classList.remove("hide");
-    renderRatesView(d);
-    applyFilters(); // apply current filter selection
+    fillCategoryOptions();
+    fillProductOptions();
+    fillWefOptions();
+
+    renderRatesView(getViewData());
+    applyFilters();
   } catch (err) {
     console.error(err);
     showToast("Error loading dealer data", "error");
@@ -100,10 +128,14 @@ async function loadDealerRates() {
 /* ========= Filters ========= */
 function bindFiltersOnce() {
   if (FILTERS_BOUND) return;
+
   const catSel = $("#filterCategory");
   const prodSel = $("#filterProduct");
-  if (!catSel || !prodSel) return;
+  const search = $("#searchInput");
+  const wefSel = $("#filterWef");
+  const viewSel = $("#viewMode");
 
+  if (!catSel || !prodSel || !search || !wefSel || !viewSel) return;
   FILTERS_BOUND = true;
 
   catSel.addEventListener("change", () => {
@@ -112,6 +144,27 @@ function bindFiltersOnce() {
   });
 
   prodSel.addEventListener("change", () => {
+    applyFilters();
+  });
+
+  search.addEventListener(
+    "input",
+    debounce(() => {
+      SEARCH_Q = search.value || "";
+      applyFilters();
+    }, 180)
+  );
+
+  wefSel.addEventListener("change", () => {
+    WEF_MODE = wefSel.value || "latest";
+    fillWefOptions(); // keep selection stable if list changes
+    renderRatesView(getViewData());
+    applyFilters();
+  });
+
+  viewSel.addEventListener("change", () => {
+    VIEW_MODE = viewSel.value || "compact";
+    renderRatesView(getViewData());
     applyFilters();
   });
 }
@@ -128,7 +181,7 @@ function fillCategoryOptions() {
   catSel.innerHTML =
     `<option value="">All</option>` +
     cats
-      .map((c) => `<option value="${String(c).replaceAll('"', "&quot;")}">${c}</option>`)
+      .map((c) => `<option value="${escHtml(c)}">${escHtml(c)}</option>`)
       .join("");
 
   if (current && cats.includes(current)) catSel.value = current;
@@ -152,149 +205,282 @@ function fillProductOptions() {
   prodSel.innerHTML =
     `<option value="">All</option>` +
     prods
-      .map((p) => `<option value="${String(p).replaceAll('"', "&quot;")}">${p}</option>`)
+      .map((p) => `<option value="${escHtml(p)}">${escHtml(p)}</option>`)
       .join("");
 
   if (current && prods.includes(current)) prodSel.value = current;
   else if (current) prodSel.value = "";
 }
 
+function fillWefOptions() {
+  const wefSel = $("#filterWef");
+  if (!wefSel || !LAST_DATA) return;
+
+  const all = Array.isArray(LAST_DATA.wefDates) ? LAST_DATA.wefDates : [];
+  const current = WEF_MODE || wefSel.value || "latest";
+
+  const opts = [];
+  opts.push(`<option value="latest">Latest only</option>`);
+  opts.push(`<option value="all">All history</option>`);
+  if (all.length) {
+    opts.push(`<option value="" disabled>──────────</option>`);
+    all.slice().reverse().forEach((d) => {
+      opts.push(`<option value="${escHtml(d)}">${escHtml(d)}</option>`);
+    });
+  }
+
+  wefSel.innerHTML = opts.join("");
+  if (current && (current === "latest" || current === "all" || all.includes(current))) {
+    wefSel.value = current;
+  } else {
+    wefSel.value = "latest";
+    WEF_MODE = "latest";
+  }
+}
+
+function setResultCount(n) {
+  const el = $("#resultCount");
+  if (el) el.textContent = `${n} item(s)`;
+}
+
 function applyFilters() {
   const cat = $("#filterCategory")?.value || "";
   const prod = $("#filterProduct")?.value || "";
+  const q = norm(SEARCH_Q);
+
+  let visible = 0;
 
   // Cards
   document.querySelectorAll(".product-card").forEach((card) => {
     const ok =
       (!cat || norm(card.dataset.category) === norm(cat)) &&
-      (!prod || norm(card.dataset.product) === norm(prod));
+      (!prod || norm(card.dataset.product) === norm(prod)) &&
+      (!q || norm(card.dataset.search || "").includes(q));
+
     card.style.display = ok ? "" : "none";
+    if (ok) visible++;
   });
 
-  // Table rows
+  // Table rows (matrix)
   const table = $("#ratesTable")?.querySelector("table");
   if (table) {
+    visible = 0;
     table.querySelectorAll("tbody tr").forEach((tr) => {
       const tds = tr.querySelectorAll("td");
       const rowCat = tds[0]?.textContent ?? "";
       const rowProd = tds[1]?.textContent ?? "";
+      const rowSize = tds[2]?.textContent ?? "";
+      const hay = `${rowCat} ${rowProd} ${rowSize}`;
+
       const ok =
         (!cat || norm(rowCat) === norm(cat)) &&
-        (!prod || norm(rowProd) === norm(prod));
+        (!prod || norm(rowProd) === norm(prod)) &&
+        (!q || norm(hay).includes(q));
+
       tr.style.display = ok ? "" : "none";
+      if (ok) visible++;
     });
   }
+
+  setResultCount(visible);
+}
+
+/* ========= ViewData (WEF filter) ========= */
+function getViewData() {
+  if (!LAST_DATA) return null;
+
+  const all = Array.isArray(LAST_DATA.wefDates) ? LAST_DATA.wefDates : [];
+  if (!all.length) return LAST_DATA;
+
+  let wefDates = all;
+
+  if (WEF_MODE === "latest") {
+    wefDates = [all[all.length - 1]];
+  } else if (WEF_MODE === "all") {
+    wefDates = all;
+  } else {
+    // specific date
+    wefDates = [WEF_MODE];
+  }
+
+  return { ...LAST_DATA, wefDates };
 }
 
 /* ========= Responsive renderer ========= */
 function renderRatesView(data) {
-  if (isMobile()) {
-    $("#ratesTableWrap")?.classList.add("hide");
-    $("#ratesCards")?.classList.remove("hide");
-    renderCards(data);
-  } else {
-    $("#ratesCards")?.classList.add("hide");
-    $("#ratesTableWrap")?.classList.remove("hide");
-    renderTable(data);
-  }
+  if (!data) return;
 
   bindFiltersOnce();
   fillCategoryOptions();
   fillProductOptions();
+  fillWefOptions();
+
+  const wantsMatrix = VIEW_MODE === "matrix" && !isMobile();
+
+  if (wantsMatrix) {
+    $("#ratesTableWrap")?.classList.remove("hide");
+    $("#ratesCards")?.classList.add("hide");
+    renderTable(data);
+  } else {
+    $("#ratesTableWrap")?.classList.add("hide");
+    $("#ratesCards")?.classList.remove("hide");
+    renderCards(data);
+  }
 }
 
 /* ========= Field formatting ========= */
+function formatTerm(cell) {
+  if (!cell) return "—";
+  if (isBlank(cell.term)) return "—";
+  return `${cell.term}d`;
+}
+
+// CD concept:
+// - if cell present AND cd is blank -> show "Net Rates"
+// - if cell present AND cd has value (e.g. 5%) -> show that
+// - if cell missing -> "—"
 function formatCd(cell) {
   if (!cell) return "—";
-  const t = cell.cdType;
-  const v = cell.cdValue;
-  if (!t && !v) return "—";
-  if (t === "CD Included") return v ? `CD Included (${v})` : "CD Included";
-  if (t && v) return `${t} (${v})`;
-  return t || v || "—";
+  const raw = (cell.cdValue !== undefined ? cell.cdValue : (cell.cd !== undefined ? cell.cd : ""));
+  return isBlank(raw) ? "Net Rates" : String(raw).trim();
+}
+
+function pickText(v, fallback = "—") {
+  if (v === 0) return "0";
+  const s = String(v ?? "").trim();
+  return s ? s : fallback;
 }
 
 function cellStackHtml(cell) {
   if (!cell) return `<div class="cell-empty">—</div>`;
 
-  const rate = cell.rate ?? "—";
-  const term = cell.term ? `${cell.term}d` : "—";
-  const gst = cell.gstType || "—";
-  const freight = cell.freight || "—";
+  const rate = pickText(cell.rate, "—");
+  const term = formatTerm(cell);
+  const gst = pickText(cell.gstType, "—");
+  const freight = pickText(cell.freight, "—");
   const cd = formatCd(cell);
-  const brand = cell.brand || "—";
+  const brand = pickText(cell.brand, "—");
 
   return `
     <div class="cell-stack">
-      <div class="cell-line cell-rate"><span class="cell-key">Rate</span><span class="cell-val">${rate}</span></div>
-      <div class="cell-line"><span class="cell-key">Term</span><span class="cell-val">${term}</span></div>
-      <div class="cell-line"><span class="cell-key">GST</span><span class="cell-val">${gst}</span></div>
-      <div class="cell-line"><span class="cell-key">Freight</span><span class="cell-val">${freight}</span></div>
-      <div class="cell-line"><span class="cell-key">CD</span><span class="cell-val">${cd}</span></div>
-      <div class="cell-line"><span class="cell-key">Brand</span><span class="cell-val">${brand}</span></div>
+      <div class="cell-line cell-rate"><span class="cell-key">Rate</span><span class="cell-val">${escHtml(rate)}</span></div>
+      <div class="cell-line"><span class="cell-key">Term</span><span class="cell-val">${escHtml(term)}</span></div>
+      <div class="cell-line"><span class="cell-key">GST</span><span class="cell-val">${escHtml(gst)}</span></div>
+      <div class="cell-line"><span class="cell-key">Freight</span><span class="cell-val">${escHtml(freight)}</span></div>
+      <div class="cell-line"><span class="cell-key">CD</span><span class="cell-val">${escHtml(cd)}</span></div>
+      <div class="cell-line"><span class="cell-key">Brand</span><span class="cell-val">${escHtml(brand)}</span></div>
     </div>
   `;
 }
 
-/* ========= Cards (mobile) ========= */
+function pillsHtml(cell) {
+  if (!cell) return `<div class="pills"><span class="pill"><span class="k">Rate</span><span class="v">—</span></span></div>`;
+
+  const term = formatTerm(cell);
+  const gst = pickText(cell.gstType, "—");
+  const freight = pickText(cell.freight, "—");
+  const cd = formatCd(cell);
+  const brand = pickText(cell.brand, "—");
+
+  return `
+    <div class="pills">
+      <span class="pill"><span class="k">Term</span><span class="v">${escHtml(term)}</span></span>
+      <span class="pill gst"><span class="k">GST</span><span class="v">${escHtml(gst)}</span></span>
+      <span class="pill"><span class="k">Freight</span><span class="v">${escHtml(freight)}</span></span>
+      <span class="pill cd"><span class="k">CD</span><span class="v">${escHtml(cd)}</span></span>
+      <span class="pill brand"><span class="k">Brand</span><span class="v">${escHtml(brand)}</span></span>
+    </div>
+  `;
+}
+
+/* ========= Cards (Compact) ========= */
 function renderCards(data) {
   const cards = $("#ratesCards");
   if (!cards) return;
   cards.innerHTML = "";
 
-  const hasWef = Array.isArray(data.wefDates) && data.wefDates.length > 0;
+  // grid on desktop
+  cards.classList.toggle("product-grid", !isMobile());
+
+  const wefs = Array.isArray(data.wefDates) ? data.wefDates : [];
+  const hasWef = wefs.length > 0;
+  const currentWef = hasWef ? wefs[wefs.length - 1] : "";
 
   (data.products || []).forEach((p) => {
+    const key = `${p.product}||${p.category}||${p.size}`;
+    const currentCell = currentWef ? data.rates?.[currentWef]?.[key] : null;
+
     const card = document.createElement("div");
     card.className = "product-card";
-    card.dataset.category = p.category;
-    card.dataset.product = p.product;
+    card.dataset.category = p.category || "";
+    card.dataset.product = p.product || "";
+    card.dataset.size = p.size || "";
+    card.dataset.search = `${p.category || ""} ${p.product || ""} ${p.size || ""}`;
 
     const header = document.createElement("div");
     header.className = "product-header";
     header.innerHTML = `
-      <div class="product-title">${p.product}</div>
-      <div class="product-meta">${p.category} • ${p.size}</div>
+      <div>
+        <div class="product-title">${escHtml(p.product || "")}</div>
+        <div class="product-meta">${escHtml(p.category || "")} • ${escHtml(p.size || "")}</div>
+      </div>
+      <div class="badge">${currentWef ? `WEF ${escHtml(currentWef)}` : "WEF —"}</div>
     `;
     card.appendChild(header);
 
-    const past = document.createElement("div");
-    past.className = "past-rates";
-    past.innerHTML = `<div class="past-title">Past Rates</div>`;
+    // current block
+    const current = document.createElement("div");
+    current.className = "current";
+    const rateText = currentCell ? pickText(currentCell.rate, "—") : "—";
+    current.innerHTML = `
+      <div class="current-top">
+        <div class="${rateText === "—" ? "rate-empty" : "rate-big"}">${escHtml(rateText)}</div>
+        <div class="muted">${currentWef ? `Latest` : "No rates"}</div>
+      </div>
+      ${pillsHtml(currentCell)}
+    `;
+    card.appendChild(current);
 
-    if (hasWef) {
-      data.wefDates.forEach((wef) => {
-        const key = `${p.product}||${p.category}||${p.size}`;
-        const cell = data.rates?.[wef]?.[key];
+    // history
+    if (hasWef && wefs.length > 1) {
+      const details = document.createElement("details");
+      details.className = "history";
+      details.innerHTML = `<summary>History (${wefs.length - 1})</summary>`;
 
-        const block = document.createElement("div");
-        block.className = "wef-block";
-        block.innerHTML = `
-          <div class="wef-date">${wef}</div>
-          <div class="wef-body">${cellStackHtml(cell)}</div>
-        `;
-        past.appendChild(block);
-      });
-    } else {
-      const line = document.createElement("div");
-      line.className = "past-item";
-      line.textContent = "No previous rates found.";
-      past.appendChild(line);
+      const body = document.createElement("div");
+      body.className = "history-body";
+
+      // show older WEFs (latest excluded) reverse so newest first
+      wefs
+        .slice(0, -1)
+        .slice()
+        .reverse()
+        .forEach((wef) => {
+          const cell = data.rates?.[wef]?.[key];
+          const row = document.createElement("div");
+          row.className = "history-row";
+          row.innerHTML = `
+            <div class="history-date">${escHtml(wef)}</div>
+            ${cellStackHtml(cell)}
+          `;
+          body.appendChild(row);
+        });
+
+      details.appendChild(body);
+      card.appendChild(details);
     }
 
-    card.appendChild(past);
     cards.appendChild(card);
   });
 }
 
-/* ========= Table (desktop) ========= */
+/* ========= Table (Matrix) ========= */
 function renderTable(data) {
   const wrap = $("#ratesTable");
   if (!wrap) return;
   wrap.innerHTML = "";
 
   const tbl = document.createElement("table");
-
   const thead = document.createElement("thead");
   const trh = document.createElement("tr");
 
@@ -319,15 +505,15 @@ function renderTable(data) {
     const tr = document.createElement("tr");
 
     const tdCat = document.createElement("td");
-    tdCat.textContent = p.category;
+    tdCat.textContent = p.category || "";
     tr.appendChild(tdCat);
 
     const tdProd = document.createElement("td");
-    tdProd.textContent = p.product;
+    tdProd.textContent = p.product || "";
     tr.appendChild(tdProd);
 
     const tdSize = document.createElement("td");
-    tdSize.textContent = p.size;
+    tdSize.textContent = p.size || "";
     tr.appendChild(tdSize);
 
     (data.wefDates || []).forEach((wef) => {
@@ -352,7 +538,7 @@ window.addEventListener(
   "resize",
   debounce(() => {
     if (!LAST_DATA) return;
-    renderRatesView(LAST_DATA);
+    renderRatesView(getViewData());
     applyFilters();
   }, 200)
 );
