@@ -232,3 +232,19 @@ details.history[open] summary:before{transform:rotate(90deg)}
 .toast.show{opacity:1}
 .toast.success{background:rgba(22,163,74,.95)}
 .toast.error{background:rgba(220,38,38,.95)}
+
+
+/* Outline button (toolbar toggles) */
+.btn.btn-outline{
+  background:#fff;
+  color:var(--brand-dark);
+  border:1px solid var(--border);
+  box-shadow:none;
+}
+.btn.btn-outline:hover{background:#eff6ff; transform:translateY(-1px)}
+.btn.btn-outline:active{transform:translateY(0)}
+.btn.btn-outline.active{
+  background:var(--brand);
+  color:#fff;
+  border-color:var(--brand);
+}
