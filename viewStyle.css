@@ -197,7 +197,12 @@ details.history[open] summary:before{transform:rotate(90deg)}
 .table-wrapper table{width:100%;border-collapse:collapse;margin-top:0;table-layout:fixed}
 .table-wrapper th,.table-wrapper td{border:1px solid var(--border);padding:10px 10px;text-align:left;vertical-align:top}
 .table-wrapper thead th{background:#f1f5f9;color:#1e293b;font-weight:800}
+.table-wrapper thead .sub th{font-weight:600;font-size:12px}
 .wef-cell{white-space:normal;min-width:250px}
+.gola-price{color:#166534;font-weight:800}
+.gola-line{margin-top:6px;font-size:13px;font-weight:700}
+.price-line{margin-top:6px;font-size:13px;font-weight:700;color:#0f172a}
+.gola-cell{white-space:nowrap;min-width:160px}
 
 /* Sticky first 3 identity columns on desktop */
 @media (min-width: 921px){
