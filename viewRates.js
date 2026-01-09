@@ -350,6 +350,29 @@ function renderRatesView(data) {
 }
 
 /* ========= Field formatting ========= */
+function toNumber_(v) {
+  if (v === 0) return 0;
+  const s = String(v ?? "").trim();
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isNaN(n) ? null : n;
+}
+
+function formatNumber_(n) {
+  const rounded = Math.round(n * 1000) / 1000;
+  const s = String(rounded);
+  return s.replace(/(\.\d*?[1-9])0+$/, "$1").replace(/\.0+$/, "");
+}
+
+function getGolaExpression(cell) {
+  if (!cell) return "";
+  const rateNum = toNumber_(cell.rate);
+  const golaNum = toNumber_(cell.golaAddPrice ?? cell.golaAdd ?? cell.gola);
+  if (rateNum === null || golaNum === null) return "";
+  const total = rateNum + golaNum;
+  return `${formatNumber_(rateNum)} + ${formatNumber_(golaNum)} = ${formatNumber_(total)}`;
+}
+
 function formatTerm(cell) {
   if (!cell) return "—";
   if (isBlank(cell.term)) return "—";
@@ -372,8 +395,9 @@ function pickText(v, fallback = "—") {
   return s ? s : fallback;
 }
 
-function cellStackHtml(cell) {
+function cellStackHtml(cell, opts = {}) {
   if (!cell) return `<div class="cell-empty">—</div>`;
+  const showGola = !!opts.showGola;
 
   const rate = pickText(cell.rate, "—");
   const term = formatTerm(cell);
@@ -381,6 +405,7 @@ function cellStackHtml(cell) {
   const freight = pickText(cell.freight, "—");
   const cd = formatCd(cell);
   const brand = pickText(cell.brand, "—");
+  const golaExpr = showGola ? getGolaExpression(cell) : "";
 
   return `
     <div class="cell-stack">
@@ -390,6 +415,7 @@ function cellStackHtml(cell) {
       <div class="cell-line"><span class="cell-key">Freight</span><span class="cell-val">${escHtml(freight)}</span></div>
       <div class="cell-line"><span class="cell-key">CD</span><span class="cell-val">${escHtml(cd)}</span></div>
       <div class="cell-line"><span class="cell-key">Brand</span><span class="cell-val">${escHtml(brand)}</span></div>
+      ${golaExpr ? `<div class="cell-line"><span class="cell-key">Gola Service Price</span><span class="cell-val gola-price">${escHtml(golaExpr)}</span></div>` : ""}
     </div>
   `;
 }
@@ -495,11 +521,17 @@ function renderCards(data) {
     const current = document.createElement("div");
     current.className = "current";
     const rateText = showCell ? pickText(showCell.rate, "—") : "—";
+    const hasRate = hasRateCell(showCell);
+    const golaExpr = getGolaExpression(showCell);
+    const priceLine = hasRate ? `<div class="price-line">Price: ${escHtml(rateText)}</div>` : "";
+    const golaLine = golaExpr ? `<div class="gola-line gola-price">Gola Service Price: ${escHtml(golaExpr)}</div>` : "";
     current.innerHTML = `
       <div class="current-top">
         <div class="${rateText === "—" ? "rate-empty" : "rate-big"}">${escHtml(rateText)}</div>
         <div class="muted">${escHtml(modeLabel)}</div>
       </div>
+      ${priceLine}
+      ${golaLine}
       ${pillsHtml(showCell)}
     `;
     card.appendChild(current);
@@ -523,7 +555,7 @@ function renderCards(data) {
           row.className = "history-row";
           row.innerHTML = `
             <div class="history-date">${escHtml(wef)}</div>
-            ${cellStackHtml(cell)}
+            ${cellStackHtml(cell, { showGola: true })}
           `;
           body.appendChild(row);
         });
@@ -545,21 +577,37 @@ function renderTable(data) {
 
   const tbl = document.createElement("table");
   const thead = document.createElement("thead");
-  const trh = document.createElement("tr");
+  const headTop = document.createElement("tr");
+  const headSub = document.createElement("tr");
+  headSub.className = "sub";
+
+  const wefs = Array.isArray(data.wefDates) ? data.wefDates : [];
+  const hasWefs = wefs.length > 0;
 
   ["Category", "Product", "Size"].forEach((h) => {
     const th = document.createElement("th");
     th.textContent = h;
-    trh.appendChild(th);
+    th.rowSpan = hasWefs ? 2 : 1;
+    headTop.appendChild(th);
   });
 
-  (data.wefDates || []).forEach((wef) => {
-    const th = document.createElement("th");
-    th.textContent = wef;
-    trh.appendChild(th);
+  wefs.forEach((wef) => {
+    const thGroup = document.createElement("th");
+    thGroup.textContent = wef;
+    thGroup.colSpan = 2;
+    headTop.appendChild(thGroup);
+
+    const thRate = document.createElement("th");
+    thRate.textContent = "Rate";
+    headSub.appendChild(thRate);
+
+    const thGola = document.createElement("th");
+    thGola.textContent = "Gola Service Price";
+    headSub.appendChild(thGola);
   });
 
-  thead.appendChild(trh);
+  thead.appendChild(headTop);
+  if (hasWefs) thead.appendChild(headSub);
   tbl.appendChild(thead);
 
   const tbody = document.createElement("tbody");
@@ -579,14 +627,20 @@ function renderTable(data) {
     tdSize.textContent = p.size || "";
     tr.appendChild(tdSize);
 
-    (data.wefDates || []).forEach((wef) => {
+    wefs.forEach((wef) => {
       const key = `${p.product}||${p.category}||${p.size}`;
       const cell = data.rates?.[wef]?.[key];
 
-      const td = document.createElement("td");
-      td.className = "wef-cell";
-      td.innerHTML = cellStackHtml(cell);
-      tr.appendChild(td);
+      const tdRate = document.createElement("td");
+      tdRate.className = "wef-cell";
+      tdRate.innerHTML = cellStackHtml(cell);
+      tr.appendChild(tdRate);
+
+      const tdGola = document.createElement("td");
+      tdGola.className = "gola-cell";
+      const golaExpr = getGolaExpression(cell);
+      tdGola.innerHTML = golaExpr ? `<div class="gola-price">${escHtml(golaExpr)}</div>` : "";
+      tr.appendChild(tdGola);
     });
 
     tbody.appendChild(tr);
@@ -603,7 +657,7 @@ function cellStackHtmlWithWef(wef, cell) {
   return `
     <div class="cell-stack">
       <div class="cell-line"><span class="cell-key">WEF</span><span class="cell-val">${escHtml(wef || "—")}</span></div>
-      ${cellStackHtml(cell)}
+      ${cellStackHtml(cell, { showGola: true })}
     </div>
   `;
 }
