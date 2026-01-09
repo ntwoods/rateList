@@ -26,6 +26,15 @@ function safeFetch(url, opts){
   return fetch(url, {...opts, signal: controller.signal}).finally(()=>clearTimeout(id));
 }
 function isMobile(){ return window.innerWidth <= 920; }
+function trimStr(v){ return String(v ?? "").trim(); }
+function parseNumberInput(v){
+  if(v === 0) return 0;
+  const s = trimStr(v);
+  if(!s) return null;
+  const n = Number(s);
+  return Number.isNaN(n) ? null : n;
+}
+function isRateFilled(v){ return trimStr(v) !== ""; }
 
 /* -------------------------- Init (GET) -------------------------- */
 async function init(){
@@ -279,6 +288,7 @@ function renderTable(data){
   const thItemGst=document.createElement('th'); thItemGst.textContent='GST Type'; thItemGst.rowSpan=2; headTop.appendChild(thItemGst);
   const thItemFre=document.createElement('th'); thItemFre.textContent='Freight'; thItemFre.rowSpan=2; headTop.appendChild(thItemFre);
   const thItemCd=document.createElement('th'); thItemCd.textContent='CD'; thItemCd.rowSpan=2; headTop.appendChild(thItemCd);
+  const thItemGola=document.createElement('th'); thItemGola.textContent='Additional Price for Gola'; thItemGola.rowSpan=2; headTop.appendChild(thItemGola);
 
   thead.appendChild(headTop);
   if(hasWef) thead.appendChild(headSub);
@@ -351,6 +361,10 @@ function renderTable(data){
     const tdCd=document.createElement('td');
     tdCd.innerHTML=`<input type="text" id="cd_${idx}" placeholder="CD (blank = Net Rates)" disabled/>`;
     tr.appendChild(tdCd);
+
+    const tdGola=document.createElement('td');
+    tdGola.innerHTML=`<input type="number" id="gola_${idx}" inputmode="decimal" step="any" placeholder="Gola add price" class="gola-input" disabled/>`;
+    tr.appendChild(tdGola);
 
 tbody.appendChild(tr);
   });
@@ -470,6 +484,16 @@ function renderCards(data){
     cdInput.disabled = true;
     fresh.appendChild(cdInput);
 
+    const golaInput = document.createElement('input');
+    golaInput.type = 'number';
+    golaInput.placeholder = 'Gola add price';
+    golaInput.id = `gola_${idx}`;
+    golaInput.inputMode = 'decimal';
+    golaInput.step = 'any';
+    golaInput.disabled = true;
+    golaInput.className = 'gola-input';
+    fresh.appendChild(golaInput);
+
     card.appendChild(fresh);
     cards.appendChild(card);
   });
@@ -490,6 +514,8 @@ function wireGlobalToggles(data){
   const globalFreightEl = $("#freightGlobal");
   const applyCdEl = $("#applyCd");
   const globalCdEl = $("#cdGlobal");
+  const applyGolaEl = $("#applyGola");
+  const globalGolaEl = $("#golaGlobal");
 
   applyTermEl.onchange=(e)=>{
     const enable=e.target.value==="per-item";
@@ -576,11 +602,58 @@ function wireGlobalToggles(data){
     }
   };
 
+  const syncGolaForIndex = (i)=>{
+    if(!applyGolaEl || !globalGolaEl) return;
+    const golaEl = document.getElementById(`gola_${i}`);
+    if(!golaEl) return;
+    const rateEl = document.getElementById(`rate_${i}`);
+    const ratePresent = rateEl && isRateFilled(rateEl.value);
+    const perItem = applyGolaEl.value === "per-item";
+    const globalVal = trimStr(globalGolaEl.value);
+
+    golaEl.classList.toggle('hide', !perItem);
+
+    if(!ratePresent){
+      golaEl.value = "";
+      golaEl.disabled = true;
+      return;
+    }
+
+    if(perItem){
+      golaEl.disabled = false;
+      if(!trimStr(golaEl.value) && globalVal){
+        golaEl.value = globalVal;
+      }
+    }else{
+      golaEl.value = globalVal;
+      golaEl.disabled = true;
+    }
+  };
+
+  if(applyGolaEl && globalGolaEl){
+    applyGolaEl.onchange=()=>{
+      (products||[]).forEach((_,i)=>syncGolaForIndex(i));
+    };
+    globalGolaEl.oninput=()=>{
+      if(applyGolaEl.value==="all"){
+        (products||[]).forEach((_,i)=>syncGolaForIndex(i));
+      }
+    };
+  }
+
+  (products||[]).forEach((_,i)=>{
+    const rateEl = document.getElementById(`rate_${i}`);
+    if(rateEl){
+      rateEl.addEventListener('input', ()=>syncGolaForIndex(i));
+    }
+  });
+
   // Initialize current state once
   applyTermEl.onchange({target:applyTermEl});
   applyGstEl.onchange({target:applyGstEl});
   applyFreightEl.onchange({target:applyFreightEl});
   applyCdEl.onchange({target:applyCdEl});
+  if(applyGolaEl) applyGolaEl.onchange({target:applyGolaEl});
 }
 
 /* --------------------------- Submit --------------------------- */
@@ -595,6 +668,8 @@ async function submitNewRates(){
   const globalFreight=(document.getElementById("freightGlobal").value||"").trim();
   const applyCd=document.getElementById("applyCd").value;
   const globalCd=(document.getElementById("cdGlobal").value||"").trim();
+  const applyGola=document.getElementById("applyGola").value;
+  const globalGola=parseNumberInput(document.getElementById("golaGlobal").value);
 
   const products=JSON.parse(document.getElementById("ratesTable").dataset.products||"[]");
   const btn=$('#saveRatesBtn');
@@ -615,7 +690,12 @@ async function submitNewRates(){
       const cdEl=document.getElementById(`cd_${i}`);
       const cdValue = applyCd==='per-item' && cdEl ? (cdEl.value||"").trim() : null;
 
-      items.push({...p,rate,term,brand,gstType,freight,cdValue});
+      const golaEl=document.getElementById(`gola_${i}`);
+      const golaAddPrice = applyGola==='per-item'
+        ? parseNumberInput(golaEl ? golaEl.value : null)
+        : globalGola;
+
+      items.push({...p,rate,term,brand,gstType,freight,cdValue,golaAddPrice});
     }
   });
 
@@ -630,7 +710,7 @@ async function submitNewRates(){
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
         action:"saveRates",
-        payload:{dealer,wefDate:wef,applyTerm,globalTerm,applyGst,globalGst,applyFreight,globalFreight,applyCd,globalCd,items}
+        payload:{dealer,wefDate:wef,applyTerm,globalTerm,applyGst,globalGst,applyFreight,globalFreight,applyCd,globalCd,applyGola,globalGola,items}
       })
     });
     showToast('Rates saved');
