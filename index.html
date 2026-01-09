@@ -14,7 +14,7 @@
     <h1>Rate List Portal</h1>
 
     <!-- Add Dealer -->
-    <section>
+    <section class="card">
       <h2>Add Dealer</h2>
       <div class="form-row">
         <input id="dealerName" placeholder="Dealer name"/>
@@ -27,7 +27,7 @@
     </section>
 
     <!-- Add Category -->
-    <section>
+    <section class="card">
       <h2>Add Category</h2>
       <div class="form-row">
         <input id="categoryName" placeholder="Category name"/>
@@ -40,7 +40,7 @@
     </section>
 
     <!-- Add Brand -->
-    <section>
+    <section class="card">
       <h2>Add Brand</h2>
       <div class="form-row">
         <input id="brandName" placeholder="Brand name"/>
@@ -53,7 +53,7 @@
     </section>
 
     <!-- Add Product -->
-    <section>
+    <section class="card">
       <h2>Add Product</h2>
       <div class="form-grid">
         <input id="prodName" placeholder="Product name"/>
@@ -68,7 +68,7 @@
     </section>
 
     <!-- Save New Rates -->
-    <section>
+    <section class="card">
       <h2>Save New Rates</h2>
 
       <!-- Dealer search with datalist -->
@@ -84,7 +84,7 @@
       <div id="ratesArea" class="hide">
         <!-- Global controls -->
         <!-- Filters -->
-        <div class="form-row wrap gap" id="filterRow" style="margin-top:10px;">
+        <div class="form-row wrap gap filter-bar" id="filterRow" style="margin-top:10px;">
           <label>Filter Category:
             <select id="filterCategory">
               <option value="">All</option>
@@ -96,7 +96,7 @@
             </select>
           </label>
         </div>        
-        <div class="form-row wrap gap">
+        <div class="form-row wrap gap controls-grid">
           <label>New W.E.F: <input type="date" id="wefInput"/></label>
 
           <label>Payment Term:
