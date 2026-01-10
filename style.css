@@ -105,15 +105,30 @@ input:focus,select:focus{border-color:#93c5fd;box-shadow:0 0 0 3px rgba(59,130,2
 .table-wrapper thead .sub th{font-weight:500;font-size:12px}
 .table-wrapper input,.table-wrapper select{width:100%}
 .rate-col{min-width:110px}
+.latest-col{min-width:260px}
+.gola-col{min-width:260px}
+.new-rate-col{min-width:280px}
+.new-rate-cell{min-width:280px}
 
 /* WEF cell stack (Rate + Term + GST + Freight + CD + Brand) */
-.wef-cell{white-space:normal;min-width:210px}
+.wef-cell{white-space:normal;min-width:210px;word-break:break-word}
 .cell-stack{display:flex;flex-direction:column;gap:4px;font-size:12.5px;line-height:1.25}
 .cell-line{display:flex;justify-content:space-between;gap:8px}
 .cell-key{color:var(--muted);font-weight:600}
 .cell-val{color:#0f172a;font-weight:600}
 .cell-rate .cell-val{color:darkred;font-weight:800}
 .cell-empty{font-weight:800;color:#94a3b8}
+
+.kv{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.25}
+.kv-row{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.k{color:var(--muted);font-weight:600}
+.v{color:#0f172a;font-weight:700;text-align:right;word-break:break-word}
+.kv-row .v{flex:1}
+.kv-row .v input,.kv-row .v select{width:100%}
+.latest-split{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:10px;align-items:start}
+.priceBig{font-size:20px;font-weight:900;color:darkred;word-break:break-word}
+.divider{border-top:1px solid var(--border);margin:8px 0}
+.new-rate{gap:8px}
 
 /* Sticky first 3 identity columns on desktop */
 @media (min-width: 921px){
