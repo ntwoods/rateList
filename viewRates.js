@@ -53,6 +53,117 @@ function isBlank(v) {
   return v === null || v === undefined || String(v).trim() === "";
 }
 
+function isValidRate(val) {
+  if (val === null || val === undefined) return false;
+  const s = String(val).trim();
+  if (!s || s === "—") return false;
+  const n = Number(s);
+  if (!Number.isNaN(n) && n === 0) return false;
+  return true;
+}
+
+function formatValue(val) {
+  if (val === 0) return "0";
+  const s = String(val ?? "").trim();
+  return s && s !== "—" ? s : "—";
+}
+
+function formatNumber_(n) {
+  const rounded = Math.round(n * 1000) / 1000;
+  const s = String(rounded);
+  return s.replace(/(\.\d*?[1-9])0+$/, "$1").replace(/\.0+$/, "");
+}
+
+function formatGolaPrice(base, add) {
+  if (!isValidRate(base) || !isValidRate(add)) return "—";
+  const baseNum = Number(base);
+  const addNum = Number(add);
+  if (Number.isNaN(baseNum) || Number.isNaN(addNum)) return "—";
+  const total = baseNum + addNum;
+  return `${formatNumber_(baseNum)} + ${formatNumber_(addNum)} = ${formatNumber_(total)}`;
+}
+
+function formatTermValue(val) {
+  const s = formatValue(val);
+  if (s === "—") return s;
+  return s.endsWith("d") ? s : `${s}d`;
+}
+
+function formatCd(cell) {
+  if (!cell) return "—";
+  const raw = cell.cdValue !== undefined ? cell.cdValue : (cell.cd !== undefined ? cell.cd : "");
+  const cleaned = formatValue(raw);
+  return cleaned === "—" ? "Net Rates" : cleaned;
+}
+
+function extractLatestRecord(item, data = LAST_DATA) {
+  if (!data || !item) return { wef: "", cell: null };
+  const allWefs = Array.isArray(data._wefAll)
+    ? data._wefAll
+    : (Array.isArray(data.wefDates) ? data.wefDates : []);
+  const key = `${item.product}||${item.category}||${item.size}`;
+  for (let i = allWefs.length - 1; i >= 0; i--) {
+    const wef = allWefs[i];
+    const cell = data.rates?.[wef]?.[key];
+    if (cell && isValidRate(cell.rate)) return { wef, cell };
+  }
+  return { wef: "", cell: null };
+}
+
+function itemHasAnyRate(item, data = LAST_DATA) {
+  if (!data || !item) return false;
+  const allWefs = Array.isArray(data._wefAll)
+    ? data._wefAll
+    : (Array.isArray(data.wefDates) ? data.wefDates : []);
+  const key = `${item.product}||${item.category}||${item.size}`;
+  return allWefs.some((wef) => isValidRate(data.rates?.[wef]?.[key]?.rate));
+}
+
+function renderKVBlock(attrs) {
+  const rows = Array.isArray(attrs)
+    ? attrs
+    : Object.entries(attrs || {}).map(([k, v]) => ({ k, v }));
+  const body = rows
+    .map(({ k, v }) => {
+      return `<div class="kv-row"><span class="k">${escHtml(k)}</span><span class="v">${escHtml(formatValue(v))}</span></div>`;
+    })
+    .join("");
+  return `<div class="kv">${body}</div>`;
+}
+
+function renderLatestNormalCell(item, data = LAST_DATA) {
+  const latest = extractLatestRecord(item, data);
+  const cell = latest.cell;
+  const attrs = [
+    { k: "WEF", v: formatValue(latest.wef) },
+    { k: "Rate", v: formatValue(cell?.rate) },
+    { k: "Term", v: formatTermValue(cell?.term) },
+    { k: "GST", v: formatValue(cell?.gstType) },
+    { k: "Freight", v: formatValue(cell?.freight) },
+    { k: "CD", v: cell ? formatCd(cell) : "—" },
+    { k: "Brand", v: formatValue(cell?.brand) }
+  ];
+  return renderKVBlock(attrs);
+}
+
+function renderLatestGolaCell(item, data = LAST_DATA) {
+  const latest = extractLatestRecord(item, data);
+  const cell = latest.cell;
+  const golaExpr = cell
+    ? formatGolaPrice(cell.rate, cell.golaAddPrice ?? cell.golaAdd ?? cell.gola)
+    : "—";
+  const attrs = [
+    { k: "WEF", v: formatValue(latest.wef) },
+    { k: "Rate", v: golaExpr },
+    { k: "Term", v: formatTermValue(cell?.term) },
+    { k: "GST", v: formatValue(cell?.gstType) },
+    { k: "Freight", v: formatValue(cell?.freight) },
+    { k: "CD", v: cell ? formatCd(cell) : "—" },
+    { k: "Brand", v: formatValue(cell?.brand) }
+  ];
+  return renderKVBlock(attrs);
+}
+
 /* ========= State ========= */
 let LAST_DATA = null;
 let FILTERS_BOUND = false;
@@ -350,62 +461,25 @@ function renderRatesView(data) {
 }
 
 /* ========= Field formatting ========= */
-function toNumber_(v) {
-  if (v === 0) return 0;
-  const s = String(v ?? "").trim();
-  if (!s) return null;
-  const n = Number(s);
-  return Number.isNaN(n) ? null : n;
-}
-
-function formatNumber_(n) {
-  const rounded = Math.round(n * 1000) / 1000;
-  const s = String(rounded);
-  return s.replace(/(\.\d*?[1-9])0+$/, "$1").replace(/\.0+$/, "");
-}
-
 function getGolaExpression(cell) {
   if (!cell) return "";
-  const rateNum = toNumber_(cell.rate);
-  const golaNum = toNumber_(cell.golaAddPrice ?? cell.golaAdd ?? cell.gola);
-  if (rateNum === null || golaNum === null) return "";
-  const total = rateNum + golaNum;
-  return `${formatNumber_(rateNum)} + ${formatNumber_(golaNum)} = ${formatNumber_(total)}`;
-}
-
-function formatTerm(cell) {
-  if (!cell) return "—";
-  if (isBlank(cell.term)) return "—";
-  return `${cell.term}d`;
-}
-
-// CD concept:
-// - if cell present AND cd is blank -> show "Net Rates"
-// - if cell present AND cd has value (e.g. 5%) -> show that
-// - if cell missing -> "—"
-function formatCd(cell) {
-  if (!cell) return "—";
-  const raw = (cell.cdValue !== undefined ? cell.cdValue : (cell.cd !== undefined ? cell.cd : ""));
-  return isBlank(raw) ? "Net Rates" : String(raw).trim();
-}
-
-function pickText(v, fallback = "—") {
-  if (v === 0) return "0";
-  const s = String(v ?? "").trim();
-  return s ? s : fallback;
+  const expr = formatGolaPrice(cell.rate, cell.golaAddPrice ?? cell.golaAdd ?? cell.gola);
+  return expr === "—" ? "" : expr;
 }
 
 function cellStackHtml(cell, opts = {}) {
   if (!cell) return `<div class="cell-empty">—</div>`;
   const showGola = !!opts.showGola;
 
-  const rate = pickText(cell.rate, "—");
-  const term = formatTerm(cell);
-  const gst = pickText(cell.gstType, "—");
-  const freight = pickText(cell.freight, "—");
+  const rate = formatValue(cell.rate);
+  const term = formatTermValue(cell.term);
+  const gst = formatValue(cell.gstType);
+  const freight = formatValue(cell.freight);
   const cd = formatCd(cell);
-  const brand = pickText(cell.brand, "—");
-  const golaExpr = showGola ? getGolaExpression(cell) : "";
+  const brand = formatValue(cell.brand);
+  const golaExpr = showGola
+    ? formatGolaPrice(cell.rate, cell.golaAddPrice ?? cell.golaAdd ?? cell.gola)
+    : "—";
 
   return `
     <div class="cell-stack">
@@ -415,22 +489,22 @@ function cellStackHtml(cell, opts = {}) {
       <div class="cell-line"><span class="cell-key">Freight</span><span class="cell-val">${escHtml(freight)}</span></div>
       <div class="cell-line"><span class="cell-key">CD</span><span class="cell-val">${escHtml(cd)}</span></div>
       <div class="cell-line"><span class="cell-key">Brand</span><span class="cell-val">${escHtml(brand)}</span></div>
-      ${golaExpr ? `<div class="cell-line"><span class="cell-key">Gola Service Price</span><span class="cell-val gola-price">${escHtml(golaExpr)}</span></div>` : ""}
+      ${golaExpr !== "—" ? `<div class="cell-line"><span class="cell-key">Gola Service Price</span><span class="cell-val gola-price golaGreen">${escHtml(golaExpr)}</span></div>` : ""}
     </div>
   `;
 }
 
-function pillsHtml(cell) {
-  if (!cell) return `<div class="pills"><span class="pill"><span class="k">Rate</span><span class="v">—</span></span></div>`;
-
-  const term = formatTerm(cell);
-  const gst = pickText(cell.gstType, "—");
-  const freight = pickText(cell.freight, "—");
-  const cd = formatCd(cell);
-  const brand = pickText(cell.brand, "—");
+function pillsHtml(cell, opts = {}) {
+  const wef = formatValue(opts.wef);
+  const term = cell ? formatTermValue(cell.term) : "—";
+  const gst = cell ? formatValue(cell.gstType) : "—";
+  const freight = cell ? formatValue(cell.freight) : "—";
+  const cd = cell ? formatCd(cell) : "—";
+  const brand = cell ? formatValue(cell.brand) : "—";
 
   return `
     <div class="pills">
+      ${wef !== "—" ? `<span class="pill"><span class="k">WEF</span><span class="v">${escHtml(wef)}</span></span>` : ""}
       <span class="pill"><span class="k">Term</span><span class="v">${escHtml(term)}</span></span>
       <span class="pill gst"><span class="k">GST</span><span class="v">${escHtml(gst)}</span></span>
       <span class="pill"><span class="k">Freight</span><span class="v">${escHtml(freight)}</span></span>
@@ -440,10 +514,9 @@ function pillsHtml(cell) {
   `;
 }
 
-
 /* ========= Rate discovery helpers ========= */
 function hasRateCell(cell) {
-  return !!(cell && !isBlank(cell.rate));
+  return !!(cell && isValidRate(cell.rate));
 }
 
 function listWefsWithRate(data, key) {
@@ -476,25 +549,21 @@ function renderCards(data) {
   (data.products || []).forEach((p) => {
     const key = `${p.product}||${p.category}||${p.size}`;
 
-    // hasRate must be computed across ALL dates (so Hide no-rate works even on specific WEF view)
+    const hasAnyRate = itemHasAnyRate(p, { ...data, _wefAll: allWefs });
     const wefsWithRate = listWefsWithRate({ ...data, _wefAll: allWefs }, key);
-    const hasAnyRate = wefsWithRate.length > 0;
 
-    // Determine which cell/date to show in the main card
     let showWef = "";
     let showCell = null;
     let modeLabel = "Latest";
 
     if (data._wefMode === "single") {
-      // show only the selected WEF, but still keep hasAnyRate from full history
       showWef = (data._selectedWef || viewWefs[0] || "").trim();
       showCell = showWef ? data.rates?.[showWef]?.[key] : null;
       modeLabel = showWef ? "Selected" : "No rates";
     } else {
-      // latest/all: show per-item latest WEF (this is what you asked for)
-      const latest = findLatestForKey({ ...data, _wefAll: allWefs }, key);
-      showWef = latest?.wef || "";
-      showCell = latest?.cell || null;
+      const latest = extractLatestRecord(p, { ...data, _wefAll: allWefs });
+      showWef = latest.wef || "";
+      showCell = latest.cell || null;
       modeLabel = showWef ? "Latest" : "No rates";
     }
 
@@ -511,36 +580,48 @@ function renderCards(data) {
     header.innerHTML = `
       <div>
         <div class="product-title">${escHtml(p.product || "")}</div>
-        <div class="product-meta">${escHtml(p.category || "")} • ${escHtml(p.size || "")}</div>
+        <div class="product-meta">${escHtml(p.category || "")} > ${escHtml(p.size || "")}</div>
       </div>
-      <div class="badge">${showWef ? `WEF ${escHtml(showWef)}` : "WEF —"}</div>
+      <div class="badge">${showWef ? `WEF ${escHtml(showWef)}` : "WEF --"}</div>
     `;
     card.appendChild(header);
 
-    // current block
+    const normalRate = showCell ? formatValue(showCell.rate) : "—";
+    const golaRate = showCell
+      ? formatGolaPrice(showCell.rate, showCell.golaAddPrice ?? showCell.golaAdd ?? showCell.gola)
+      : "—";
+    const attrs = [
+      { k: "WEF", v: formatValue(showWef) },
+      { k: "Term", v: formatTermValue(showCell?.term) },
+      { k: "GST", v: formatValue(showCell?.gstType) },
+      { k: "Freight", v: formatValue(showCell?.freight) },
+      { k: "CD", v: showCell ? formatCd(showCell) : "—" },
+      { k: "Brand", v: formatValue(showCell?.brand) }
+    ];
+
     const current = document.createElement("div");
     current.className = "current";
-    const rateText = showCell ? pickText(showCell.rate, "—") : "—";
-    const hasRate = hasRateCell(showCell);
-    const golaExpr = getGolaExpression(showCell);
-    const priceLine = hasRate ? `<div class="price-line">Price: ${escHtml(rateText)}</div>` : "";
-    const golaLine = golaExpr ? `<div class="gola-line gola-price">Gola Service Price: ${escHtml(golaExpr)}</div>` : "";
     current.innerHTML = `
-      <div class="current-top">
-        <div class="${rateText === "—" ? "rate-empty" : "rate-big"}">${escHtml(rateText)}</div>
-        <div class="muted">${escHtml(modeLabel)}</div>
+      <div class="latest-split">
+        <div class="latest-block">
+          <div class="price-label">Normal</div>
+          <div class="priceBig ${normalRate === "—" ? "price-empty" : ""}">${escHtml(normalRate)}</div>
+          <div class="muted">${escHtml(modeLabel)}</div>
+        </div>
+        <div class="latest-block">
+          <div class="price-label">Gola Service Price</div>
+          <div class="priceBig ${golaRate === "—" ? "price-empty" : "gola-price golaGreen"}">${escHtml(golaRate)}</div>
+        </div>
       </div>
-      ${priceLine}
-      ${golaLine}
-      ${pillsHtml(showCell)}
+      <div class="divider"></div>
+      <div class="attr-block">
+        ${renderKVBlock(attrs)}
+      </div>
     `;
     card.appendChild(current);
 
-    // History:
-    // - In latest/all mode, show other WEFs where rate exists for this item
-    // - In single mode, keep history hidden to match "only that WEF" view
     if (data._wefMode !== "single" && hasAnyRate) {
-      const others = wefsWithRate.filter((d) => d !== showWef).slice().reverse(); // newest first
+      const others = wefsWithRate.filter((d) => d !== showWef).slice().reverse();
       if (others.length) {
         const details = document.createElement("details");
         details.className = "history";
@@ -568,7 +649,6 @@ function renderCards(data) {
     cards.appendChild(card);
   });
 }
-
 /* ========= Table (Matrix) ========= */
 function renderTable(data) {
   const wrap = $("#ratesTable");
@@ -614,6 +694,7 @@ function renderTable(data) {
 
   (data.products || []).forEach((p) => {
     const tr = document.createElement("tr");
+    tr.dataset.hasRate = itemHasAnyRate(p, data) ? "1" : "0";
 
     const tdCat = document.createElement("td");
     tdCat.textContent = p.category || "";
@@ -639,7 +720,7 @@ function renderTable(data) {
       const tdGola = document.createElement("td");
       tdGola.className = "gola-cell";
       const golaExpr = getGolaExpression(cell);
-      tdGola.innerHTML = golaExpr ? `<div class="gola-price">${escHtml(golaExpr)}</div>` : "";
+      tdGola.innerHTML = golaExpr ? `<div class="gola-price golaGreen">${escHtml(golaExpr)}</div>` : "";
       tr.appendChild(tdGola);
     });
 
@@ -652,15 +733,16 @@ function renderTable(data) {
 
 
 /* ========= Table (Latest per-item) ========= */
-function cellStackHtmlWithWef(wef, cell) {
-  if (!cell) return `<div class="cell-stack"><div class="cell-line"><span class="cell-key">WEF</span><span class="cell-val">—</span></div><div class="cell-empty">—</div></div>`;
+function cellStackHtmlWithWef(wef, cell, opts = {}) {
+  if (!cell) return `<div class="cell-stack"><div class="cell-line"><span class="cell-key">WEF</span><span class="cell-val">--</span></div><div class="cell-empty">--</div></div>`;
   return `
     <div class="cell-stack">
-      <div class="cell-line"><span class="cell-key">WEF</span><span class="cell-val">${escHtml(wef || "—")}</span></div>
-      ${cellStackHtml(cell, { showGola: true })}
+      <div class="cell-line"><span class="cell-key">WEF</span><span class="cell-val">${escHtml(wef || "--")}</span></div>
+      ${cellStackHtml(cell, opts)}
     </div>
   `;
 }
+
 
 function renderTableLatest(data) {
   const wrap = $("#ratesTable");
@@ -671,25 +753,30 @@ function renderTableLatest(data) {
   const thead = document.createElement("thead");
   const trh = document.createElement("tr");
 
-  ["Category", "Product", "Size", "Latest"].forEach((h) => {
+  ["Category", "Product", "Size"].forEach((h) => {
     const th = document.createElement("th");
     th.textContent = h;
     trh.appendChild(th);
   });
 
+  const thLatest = document.createElement("th");
+  thLatest.textContent = "Latest (Normal)";
+  thLatest.className = "latest-col";
+  trh.appendChild(thLatest);
+
+  const thGola = document.createElement("th");
+  thGola.textContent = "Latest (Gola Service Price)";
+  thGola.className = "gola-col";
+  trh.appendChild(thGola);
+
   thead.appendChild(trh);
   tbl.appendChild(thead);
 
   const tbody = document.createElement("tbody");
-  const allWefs = Array.isArray(data._wefAll) ? data._wefAll : (Array.isArray(data.wefDates) ? data.wefDates : []);
-
   (data.products || []).forEach((p) => {
     const tr = document.createElement("tr");
 
-    // used by Hide no-rate toggle (computed across ALL WEFs)
-    const keyAny = `${p.product}||${p.category}||${p.size}`;
-    const hasAnyRate = allWefs.some((w) => hasRateCell(data.rates?.[w]?.[keyAny]));
-    tr.dataset.hasRate = hasAnyRate ? "1" : "0";
+    tr.dataset.hasRate = itemHasAnyRate(p, data) ? "1" : "0";
 
     const tdCat = document.createElement("td");
     tdCat.textContent = p.category || "";
@@ -703,19 +790,23 @@ function renderTableLatest(data) {
     tdSize.textContent = p.size || "";
     tr.appendChild(tdSize);
 
-    const td = document.createElement("td");
-    td.className = "wef-cell";
+    const tdLatest = document.createElement("td");
+    tdLatest.className = "wef-cell latest-col";
+    tdLatest.innerHTML = renderLatestNormalCell(p, data);
+    tr.appendChild(tdLatest);
 
-    const latest = findLatestForKey({ ...data, _wefAll: allWefs }, keyAny);
-    td.innerHTML = cellStackHtmlWithWef(latest?.wef || "", latest?.cell || null);
+    const tdGola = document.createElement("td");
+    tdGola.className = "wef-cell gola-col";
+    tdGola.innerHTML = renderLatestGolaCell(p, data);
+    tr.appendChild(tdGola);
 
-    tr.appendChild(td);
     tbody.appendChild(tr);
   });
 
   tbl.appendChild(tbody);
   wrap.appendChild(tbl);
 }
+
 
 
 /* ========= Resize: re-render ========= */
