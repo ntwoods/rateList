@@ -36,6 +36,133 @@ function parseNumberInput(v){
 }
 function isRateFilled(v){ return trimStr(v) !== ""; }
 
+function escHtml(v){
+  const s = String(v ?? "");
+  return s
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function isValidRate(val){
+  if(val === null || val === undefined) return false;
+  const s = String(val).trim();
+  if(!s || s === "—") return false;
+  const n = Number(s);
+  if(!Number.isNaN(n) && n === 0) return false;
+  return true;
+}
+
+function formatValue(val){
+  if(val === 0) return "0";
+  const s = String(val ?? "").trim();
+  return s && s !== "—" ? s : "—";
+}
+
+function formatNumber_(n){
+  const rounded = Math.round(n * 1000) / 1000;
+  const s = String(rounded);
+  return s.replace(/(\.\d*?[1-9])0+$/, "$1").replace(/\.0+$/, "");
+}
+
+function formatGolaPrice(base, add){
+  if(!isValidRate(base) || !isValidRate(add)) return "—";
+  const baseNum = Number(base);
+  const addNum = Number(add);
+  if(Number.isNaN(baseNum) || Number.isNaN(addNum)) return "—";
+  const total = baseNum + addNum;
+  return `${formatNumber_(baseNum)} + ${formatNumber_(addNum)} = ${formatNumber_(total)}`;
+}
+
+function formatTermValue(val){
+  const s = formatValue(val);
+  if(s === "—") return s;
+  return s.endsWith("d") ? s : `${s}d`;
+}
+
+function formatCd(cell){
+  if(!cell) return "—";
+  const raw = cell.cdValue !== undefined ? cell.cdValue : (cell.cd !== undefined ? cell.cd : "");
+  const cleaned = formatValue(raw);
+  return cleaned === "—" ? "Net Rates" : cleaned;
+}
+
+function extractLatestRecord(item, data){
+  if(!data || !item) return { wef: "", cell: null };
+  const allWefs = Array.isArray(data.wefDates) ? data.wefDates : [];
+  const key = `${item.product}||${item.category}||${item.size}`;
+  for(let i = allWefs.length - 1; i >= 0; i--){
+    const wef = allWefs[i];
+    const cell = data.rates?.[wef]?.[key];
+    if(cell && isValidRate(cell.rate)) return { wef, cell };
+  }
+  return { wef: "", cell: null };
+}
+
+function itemHasAnyRate(item, data){
+  if(!data || !item) return false;
+  const allWefs = Array.isArray(data.wefDates) ? data.wefDates : [];
+  const key = `${item.product}||${item.category}||${item.size}`;
+  return allWefs.some((wef)=>isValidRate(data.rates?.[wef]?.[key]?.rate));
+}
+
+function renderKVBlock(attrs){
+  const rows = Array.isArray(attrs)
+    ? attrs
+    : Object.entries(attrs || {}).map(([k,v])=>({k,v}));
+  const body = rows.map(({k,v})=>{
+    return `<div class="kv-row"><span class="k">${escHtml(k)}</span><span class="v">${escHtml(formatValue(v))}</span></div>`;
+  }).join("");
+  return `<div class="kv">${body}</div>`;
+}
+
+function renderLatestNormalCell(item, data){
+  const latest = extractLatestRecord(item, data);
+  const cell = latest.cell;
+  const attrs = [
+    { k:"WEF", v: formatValue(latest.wef) },
+    { k:"Rate", v: formatValue(cell?.rate) },
+    { k:"Term", v: formatTermValue(cell?.term) },
+    { k:"GST", v: formatValue(cell?.gstType) },
+    { k:"Freight", v: formatValue(cell?.freight) },
+    { k:"CD", v: cell ? formatCd(cell) : "—" },
+    { k:"Brand", v: formatValue(cell?.brand) }
+  ];
+  return renderKVBlock(attrs);
+}
+
+function renderLatestGolaCell(item, data){
+  const latest = extractLatestRecord(item, data);
+  const cell = latest.cell;
+  const golaExpr = cell
+    ? formatGolaPrice(cell.rate, cell.golaAddPrice ?? cell.golaAdd ?? cell.gola)
+    : "—";
+  const attrs = [
+    { k:"WEF", v: formatValue(latest.wef) },
+    { k:"Rate", v: golaExpr },
+    { k:"Term", v: formatTermValue(cell?.term) },
+    { k:"GST", v: formatValue(cell?.gstType) },
+    { k:"Freight", v: formatValue(cell?.freight) },
+    { k:"CD", v: cell ? formatCd(cell) : "—" },
+    { k:"Brand", v: formatValue(cell?.brand) }
+  ];
+  return renderKVBlock(attrs);
+}
+
+function renderWefCell(cell){
+  const attrs = [
+    { k:"Rate", v: formatValue(cell?.rate) },
+    { k:"Term", v: formatTermValue(cell?.term) },
+    { k:"GST", v: formatValue(cell?.gstType) },
+    { k:"Freight", v: formatValue(cell?.freight) },
+    { k:"CD", v: cell ? formatCd(cell) : "—" },
+    { k:"Brand", v: formatValue(cell?.brand) }
+  ];
+  return renderKVBlock(attrs);
+}
+
 /* -------------------------- Init (GET) -------------------------- */
 async function init(){
   try{
@@ -261,112 +388,86 @@ function renderTable(data){
   const wrap = document.getElementById("ratesTable");
   wrap.innerHTML = "";
   const tbl = document.createElement("table");
-  const thead = document.createElement('thead');
-  const headTop = document.createElement('tr');
-  const headSub = document.createElement('tr'); headSub.className='sub';
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
 
-  ['Category','Product','Size'].forEach(text=>{
-    const th = document.createElement('th'); th.textContent = text; th.rowSpan=2; headTop.appendChild(th);
+  const wefs = Array.isArray(data.wefDates) ? data.wefDates : [];
+  const hasWef = wefs.length > 0;
+
+  ["Category","Product","Size"].forEach(text=>{
+    const th = document.createElement("th"); th.textContent = text; headRow.appendChild(th);
   });
 
-  const hasWef = Array.isArray(data.wefDates) && data.wefDates.length > 0;
-  if (hasWef) {
-    data.wefDates.forEach(wef=>{
-      const thGroup = document.createElement('th'); thGroup.textContent=wef; thGroup.colSpan=6; headTop.appendChild(thGroup);
-      const thRate=document.createElement('th'); thRate.textContent='Rate'; thRate.classList.add('rate-col'); headSub.appendChild(thRate);
-      const thTerm=document.createElement('th'); thTerm.textContent='Payment Term'; headSub.appendChild(thTerm);
-      const thBrand=document.createElement('th'); thBrand.textContent='Brand'; headSub.appendChild(thBrand);
-      const thGst=document.createElement('th'); thGst.textContent='GST Type'; headSub.appendChild(thGst);
-      const thFre=document.createElement('th'); thFre.textContent='Freight'; headSub.appendChild(thFre);
-      const thCd=document.createElement('th'); thCd.textContent='CD'; headSub.appendChild(thCd);
+  const thLatest = document.createElement("th");
+  thLatest.textContent = "Latest (Normal)";
+  thLatest.className = "latest-col";
+  headRow.appendChild(thLatest);
+
+  const thGola = document.createElement("th");
+  thGola.textContent = "Latest (Gola Service Price)";
+  thGola.className = "gola-col";
+  headRow.appendChild(thGola);
+
+  if(hasWef){
+    wefs.forEach(wef=>{
+      const th = document.createElement("th"); th.textContent = wef; th.className = "wef-col"; headRow.appendChild(th);
     });
   }
 
-  const thNew=document.createElement('th'); thNew.textContent='New Rate'; thNew.rowSpan=2; thNew.classList.add('rate-col'); headTop.appendChild(thNew);
-  const thItemTerm=document.createElement('th'); thItemTerm.textContent='Item Term'; thItemTerm.rowSpan=2; headTop.appendChild(thItemTerm);
-  const thItemBrand=document.createElement('th'); thItemBrand.textContent='New Brand (optional)'; thItemBrand.rowSpan=2; headTop.appendChild(thItemBrand);
-  const thItemGst=document.createElement('th'); thItemGst.textContent='GST Type'; thItemGst.rowSpan=2; headTop.appendChild(thItemGst);
-  const thItemFre=document.createElement('th'); thItemFre.textContent='Freight'; thItemFre.rowSpan=2; headTop.appendChild(thItemFre);
-  const thItemCd=document.createElement('th'); thItemCd.textContent='CD'; thItemCd.rowSpan=2; headTop.appendChild(thItemCd);
-  const thItemGola=document.createElement('th'); thItemGola.textContent='Additional Price for Gola'; thItemGola.rowSpan=2; headTop.appendChild(thItemGola);
+  const thNew = document.createElement("th");
+  thNew.textContent = "New Rate";
+  thNew.className = "new-rate-col";
+  headRow.appendChild(thNew);
 
-  thead.appendChild(headTop);
-  if(hasWef) thead.appendChild(headSub);
+  thead.appendChild(headRow);
   tbl.appendChild(thead);
 
-  const tbody=document.createElement('tbody');
+  const tbody = document.createElement("tbody");
   (data.products||[]).forEach((p,idx)=>{
-    const tr=document.createElement('tr');
+    const tr = document.createElement("tr");
     tr.dataset.category = p.category;
     tr.dataset.product = p.product;
     [p.category,p.product,p.size].forEach(v=>{
-      const td=document.createElement('td'); td.textContent=v; tr.appendChild(td);
+      const td = document.createElement("td"); td.textContent = v; tr.appendChild(td);
     });
 
+    const tdLatest = document.createElement("td");
+    tdLatest.className = "wef-cell latest-col";
+    tdLatest.innerHTML = renderLatestNormalCell(p, data);
+    tr.appendChild(tdLatest);
+
+    const tdGola = document.createElement("td");
+    tdGola.className = "wef-cell gola-col";
+    tdGola.innerHTML = renderLatestGolaCell(p, data);
+    tr.appendChild(tdGola);
+
     if(hasWef){
-      data.wefDates.forEach(wef=>{
-        const key=`${p.product}||${p.category}||${p.size}`;
-        const cell=data.rates?.[wef]?.[key];
-        const tdRate=document.createElement('td'); tdRate.classList.add('rate-col');
-        const tdTerm=document.createElement('td');
-        const tdBrand=document.createElement('td');
-        const tdGst=document.createElement('td');
-        const tdFre=document.createElement('td');
-        const tdCd=document.createElement('td');
-        if(cell){
-          tdRate.textContent = (cell.rate ?? '') !== '' ? cell.rate : '—';
-          tdTerm.textContent = cell.term ? `${cell.term} d` : '—';
-          tdBrand.textContent = cell.brand ? cell.brand : '—';
-          tdGst.textContent  = cell.gstType ? cell.gstType : '—';
-          tdFre.textContent  = cell.freight || '—';
-          const cdDisp = (cell.cd ?? '').toString().trim();
-          tdCd.textContent   = cdDisp ? cdDisp : 'Net Rates';
-        }else{
-          tdRate.textContent='—';
-          tdTerm.textContent='—';
-          tdBrand.textContent='—';
-          tdGst.textContent='—';
-          tdFre.textContent='—';
-          tdCd.textContent='—';
-        }
-        [tdRate,tdTerm,tdBrand,tdGst,tdFre,tdCd].forEach(td=>tr.appendChild(td));
+      wefs.forEach(wef=>{
+        const key = `${p.product}||${p.category}||${p.size}`;
+        const cell = data.rates?.[wef]?.[key];
+        const td = document.createElement("td");
+        td.className = "wef-cell";
+        td.innerHTML = renderWefCell(cell);
+        tr.appendChild(td);
       });
     }
 
-    // New entries
-    const tdNew=document.createElement('td');
-    tdNew.classList.add("rate-col");
-    tdNew.innerHTML=`<input type="number" id="rate_${idx}" inputmode="decimal" placeholder="0"/>`;
+    const tdNew = document.createElement("td");
+    tdNew.className = "new-rate-cell";
+    tdNew.innerHTML = `
+      <div class="kv new-rate">
+        <div class="kv-row"><span class="k">Rate</span><span class="v"><input type="number" id="rate_${idx}" inputmode="decimal" placeholder="0"/></span></div>
+        <div class="kv-row"><span class="k">Term</span><span class="v"><select id="term_${idx}" disabled><option>15</option><option>30</option></select></span></div>
+        <div class="kv-row"><span class="k">Brand</span><span class="v"><input type="text" id="brand_${idx}" placeholder="Brand (optional)"/></span></div>
+        <div class="kv-row"><span class="k">GST</span><span class="v"><select id="gst_${idx}" disabled><option value="Paid">Paid</option><option value="Extra">Extra</option></select></span></div>
+        <div class="kv-row"><span class="k">Freight</span><span class="v"><input type="text" id="freight_${idx}" list="freightList" placeholder="Freight" disabled/></span></div>
+        <div class="kv-row"><span class="k">CD</span><span class="v"><input type="text" id="cd_${idx}" placeholder="CD (blank = Net Rates)" disabled/></span></div>
+        <div class="kv-row"><span class="k">Gola Add</span><span class="v"><input type="number" id="gola_${idx}" inputmode="decimal" step="any" placeholder="Gola add price" class="gola-input" disabled/></span></div>
+      </div>
+    `;
     tr.appendChild(tdNew);
 
-    const tdTerm=document.createElement('td');
-    tdTerm.innerHTML=`<select id="term_${idx}" disabled><option>15</option><option>30</option></select>`;
-    tr.appendChild(tdTerm);
-
-    const tdBrand=document.createElement('td');
-    tdBrand.innerHTML=`<input type="text" id="brand_${idx}" placeholder="Brand (optional)"/>`;
-    tr.appendChild(tdBrand);
-
-    const tdGst=document.createElement('td');
-    tdGst.innerHTML=`<select id="gst_${idx}" disabled>
-                       <option value="Paid">Paid</option>
-                       <option value="Extra">Extra</option>
-                     </select>`;
-    tr.appendChild(tdGst);
-
-    const tdFre=document.createElement('td');
-    tdFre.innerHTML=`<input type="text" id="freight_${idx}" list="freightList" placeholder="Freight" disabled/>`;
-    tr.appendChild(tdFre);
-
-    const tdCd=document.createElement('td');
-    tdCd.innerHTML=`<input type="text" id="cd_${idx}" placeholder="CD (blank = Net Rates)" disabled/>`;
-    tr.appendChild(tdCd);
-
-    const tdGola=document.createElement('td');
-    tdGola.innerHTML=`<input type="number" id="gola_${idx}" inputmode="decimal" step="any" placeholder="Gola add price" class="gola-input" disabled/>`;
-    tr.appendChild(tdGola);
-
-tbody.appendChild(tr);
+    tbody.appendChild(tr);
   });
 
   tbl.appendChild(tbody);
@@ -374,16 +475,14 @@ tbody.appendChild(tr);
   wrap.appendChild(tbl);
 
   if(!hasWef){
-    const banner=document.createElement('div');
-    banner.textContent="No previous rates found — you are entering first-time rates.";
-    banner.className="muted";
+    const banner = document.createElement("div");
+    banner.textContent = "No previous rates found - you are entering first-time rates.";
+    banner.className = "muted";
     wrap.prepend(banner);
   }
 
-  // sync per-item enable/disable with globals
   wireGlobalToggles(data);
 }
-
 /* ------------------------- Mobile: cards -------------------------- */
 function renderCards(data){
   const cards = $('#ratesCards');
