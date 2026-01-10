@@ -164,6 +164,26 @@ function renderLatestGolaCell(item, data = LAST_DATA) {
   return renderKVBlock(attrs);
 }
 
+function hasGolaCell(cell) {
+  const add = cell?.golaAddPrice ?? cell?.golaAdd ?? cell?.gola;
+  return isValidRate(cell?.rate) && isValidRate(add);
+}
+
+function dealerHasAnyGola(data) {
+  if (!data) return false;
+  const allWefs = Array.isArray(data._wefAll)
+    ? data._wefAll
+    : (Array.isArray(data.wefDates) ? data.wefDates : []);
+  for (const wef of allWefs) {
+    const entries = data.rates?.[wef];
+    if (!entries) continue;
+    for (const key of Object.keys(entries)) {
+      if (hasGolaCell(entries[key])) return true;
+    }
+  }
+  return false;
+}
+
 /* ========= State ========= */
 let LAST_DATA = null;
 let FILTERS_BOUND = false;
@@ -445,6 +465,7 @@ function renderRatesView(data) {
   fillCategoryOptions();
   fillProductOptions();
   fillWefOptions();
+  data._hasGola = dealerHasAnyGola(data);
 
   const wantsMatrix = VIEW_MODE === "matrix" && !isMobile();
 
@@ -587,6 +608,7 @@ function renderCards(data) {
     card.appendChild(header);
 
     const normalRate = showCell ? formatValue(showCell.rate) : "—";
+    const hasDealerGola = !!data._hasGola;
     const golaRate = showCell
       ? formatGolaPrice(showCell.rate, showCell.golaAddPrice ?? showCell.golaAdd ?? showCell.gola)
       : "—";
@@ -602,16 +624,18 @@ function renderCards(data) {
     const current = document.createElement("div");
     current.className = "current";
     current.innerHTML = `
-      <div class="latest-split">
+      <div class="latest-split ${hasDealerGola ? "" : "single"}">
         <div class="latest-block">
           <div class="price-label">Normal</div>
           <div class="priceBig ${normalRate === "—" ? "price-empty" : ""}">${escHtml(normalRate)}</div>
           <div class="muted">${escHtml(modeLabel)}</div>
         </div>
-        <div class="latest-block">
-          <div class="price-label">Gola Service Price</div>
-          <div class="priceBig ${golaRate === "—" ? "price-empty" : "gola-price golaGreen"}">${escHtml(golaRate)}</div>
-        </div>
+        ${hasDealerGola ? `
+          <div class="latest-block">
+            <div class="price-label">Gola Service Price</div>
+            <div class="priceBig ${golaRate === "—" ? "price-empty" : "gola-price golaGreen"}">${escHtml(golaRate)}</div>
+          </div>
+        ` : ""}
       </div>
       <div class="divider"></div>
       <div class="attr-block">
@@ -663,6 +687,7 @@ function renderTable(data) {
 
   const wefs = Array.isArray(data.wefDates) ? data.wefDates : [];
   const hasWefs = wefs.length > 0;
+  const hasDealerGola = !!data._hasGola;
 
   ["Category", "Product", "Size"].forEach((h) => {
     const th = document.createElement("th");
@@ -674,16 +699,18 @@ function renderTable(data) {
   wefs.forEach((wef) => {
     const thGroup = document.createElement("th");
     thGroup.textContent = wef;
-    thGroup.colSpan = 2;
+    thGroup.colSpan = hasDealerGola ? 2 : 1;
     headTop.appendChild(thGroup);
 
     const thRate = document.createElement("th");
     thRate.textContent = "Rate";
     headSub.appendChild(thRate);
 
-    const thGola = document.createElement("th");
-    thGola.textContent = "Gola Service Price";
-    headSub.appendChild(thGola);
+    if (hasDealerGola) {
+      const thGola = document.createElement("th");
+      thGola.textContent = "Gola Service Price";
+      headSub.appendChild(thGola);
+    }
   });
 
   thead.appendChild(headTop);
@@ -717,11 +744,13 @@ function renderTable(data) {
       tdRate.innerHTML = cellStackHtml(cell);
       tr.appendChild(tdRate);
 
-      const tdGola = document.createElement("td");
-      tdGola.className = "gola-cell";
-      const golaExpr = getGolaExpression(cell);
-      tdGola.innerHTML = golaExpr ? `<div class="gola-price golaGreen">${escHtml(golaExpr)}</div>` : "";
-      tr.appendChild(tdGola);
+      if (hasDealerGola) {
+        const tdGola = document.createElement("td");
+        tdGola.className = "gola-cell";
+        const golaExpr = getGolaExpression(cell);
+        tdGola.innerHTML = golaExpr ? `<div class="gola-price golaGreen">${escHtml(golaExpr)}</div>` : "";
+        tr.appendChild(tdGola);
+      }
     });
 
     tbody.appendChild(tr);
@@ -759,15 +788,19 @@ function renderTableLatest(data) {
     trh.appendChild(th);
   });
 
+  const hasDealerGola = !!data._hasGola;
+
   const thLatest = document.createElement("th");
   thLatest.textContent = "Latest (Normal)";
   thLatest.className = "latest-col";
   trh.appendChild(thLatest);
 
-  const thGola = document.createElement("th");
-  thGola.textContent = "Latest (Gola Service Price)";
-  thGola.className = "gola-col";
-  trh.appendChild(thGola);
+  if (hasDealerGola) {
+    const thGola = document.createElement("th");
+    thGola.textContent = "Latest (Gola Service Price)";
+    thGola.className = "gola-col";
+    trh.appendChild(thGola);
+  }
 
   thead.appendChild(trh);
   tbl.appendChild(thead);
@@ -795,10 +828,12 @@ function renderTableLatest(data) {
     tdLatest.innerHTML = renderLatestNormalCell(p, data);
     tr.appendChild(tdLatest);
 
-    const tdGola = document.createElement("td");
-    tdGola.className = "wef-cell gola-col";
-    tdGola.innerHTML = renderLatestGolaCell(p, data);
-    tr.appendChild(tdGola);
+    if (hasDealerGola) {
+      const tdGola = document.createElement("td");
+      tdGola.className = "wef-cell gola-col";
+      tdGola.innerHTML = renderLatestGolaCell(p, data);
+      tr.appendChild(tdGola);
+    }
 
     tbody.appendChild(tr);
   });
