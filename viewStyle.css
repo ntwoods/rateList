@@ -133,6 +133,7 @@ input:focus,select:focus{border-color:#93c5fd;box-shadow:0 0 0 3px rgba(59,130,2
   background:#f8fafc;
 }
 .latest-split{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:10px;align-items:start}
+.latest-split.single{grid-template-columns:1fr}
 .latest-block{padding:6px 8px}
 .priceBig{font-size:22px;font-weight:900;color:darkred;word-break:break-word}
 .divider{border-top:1px solid var(--border);margin:8px 0}
@@ -276,7 +277,4 @@ details.history[open] summary:before{transform:rotate(90deg)}
 .btn.btn-outline:hover{background:#eff6ff; transform:translateY(-1px)}
 .btn.btn-outline:active{transform:translateY(0)}
 .btn.btn-outline.active{
-  background:var(--brand);
-  color:#fff;
-  border-color:var(--brand);
-}
+  background:var(--brand
