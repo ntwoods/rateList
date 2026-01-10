@@ -408,12 +408,6 @@ function renderTable(data){
   thGola.className = "gola-col";
   headRow.appendChild(thGola);
 
-  if(hasWef){
-    wefs.forEach(wef=>{
-      const th = document.createElement("th"); th.textContent = wef; th.className = "wef-col"; headRow.appendChild(th);
-    });
-  }
-
   const thNew = document.createElement("th");
   thNew.textContent = "New Rate";
   thNew.className = "new-rate-col";
@@ -440,17 +434,6 @@ function renderTable(data){
     tdGola.className = "wef-cell gola-col";
     tdGola.innerHTML = renderLatestGolaCell(p, data);
     tr.appendChild(tdGola);
-
-    if(hasWef){
-      wefs.forEach(wef=>{
-        const key = `${p.product}||${p.category}||${p.size}`;
-        const cell = data.rates?.[wef]?.[key];
-        const td = document.createElement("td");
-        td.className = "wef-cell";
-        td.innerHTML = renderWefCell(cell);
-        tr.appendChild(td);
-      });
-    }
 
     const tdNew = document.createElement("td");
     tdNew.className = "new-rate-cell";
@@ -508,29 +491,36 @@ function renderCards(data){
     header.appendChild(meta);
     card.appendChild(header);
 
-    // Past rates
+    // Latest rate
     const past = document.createElement('div');
     past.className = 'past-rates';
     const pastTitle = document.createElement('div');
-    pastTitle.textContent = 'Past Rates';
+    pastTitle.textContent = 'Latest Rate';
     past.appendChild(pastTitle);
 
     if(hasWef){
-      data.wefDates.forEach(wef=>{
-        const key=`${p.product}||${p.category}||${p.size}`;
-        const cell=data.rates?.[wef]?.[key];
-        const line = document.createElement('div');
-        line.className = 'past-item';
-        if(cell){
-          const cdTxtRaw = (cell.cd ?? '').toString().trim();
-          const cdTxt = cdTxtRaw ? cdTxtRaw : 'Net Rates';
-        const rateVal = cell.rate ?? '—';
-        line.innerHTML = `${wef} → <span class="rate-highlight">Rate: ${rateVal}</span> | Term: ${cell.term ? cell.term+'d' : '—'} | Brand: ${cell.brand||'—'} | GST: ${cell.gstType||'—'} | Freight: ${cell.freight||'—'} | CD: ${cdTxt}`;
-        }else{
-          line.textContent = `${wef} → —`;
-        }
-        past.appendChild(line);
-      });
+      const latest = extractLatestRecord(p, data);
+      const cell = latest.cell;
+      if(cell){
+        const attrs = [
+          { k:"WEF", v: formatValue(latest.wef) },
+          { k:"Rate", v: formatValue(cell?.rate) },
+          { k:"Term", v: formatTermValue(cell?.term) },
+          { k:"GST", v: formatValue(cell?.gstType) },
+          { k:"Freight", v: formatValue(cell?.freight) },
+          { k:"CD", v: cell ? formatCd(cell) : "—" },
+          { k:"Brand", v: formatValue(cell?.brand) }
+        ];
+        const block = document.createElement('div');
+        block.className = 'past-item';
+        block.innerHTML = renderKVBlock(attrs);
+        past.appendChild(block);
+      }else{
+        const empty = document.createElement('div');
+        empty.className = 'past-item';
+        empty.textContent = 'No previous rates found.';
+        past.appendChild(empty);
+      }
     }else{
       const empty = document.createElement('div');
       empty.className = 'past-item';
