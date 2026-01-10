@@ -132,6 +132,10 @@ input:focus,select:focus{border-color:#93c5fd;box-shadow:0 0 0 3px rgba(59,130,2
   padding:10px;
   background:#f8fafc;
 }
+.latest-split{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:10px;align-items:start}
+.latest-block{padding:6px 8px}
+.priceBig{font-size:22px;font-weight:900;color:darkred;word-break:break-word}
+.divider{border-top:1px solid var(--border);margin:8px 0}
 .current-top{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px}
 .rate-big{
   font-size:26px;
@@ -150,6 +154,8 @@ input:focus,select:focus{border-color:#93c5fd;box-shadow:0 0 0 3px rgba(59,130,2
 .price-divider{border-top:1px solid var(--border);margin:8px 0}
 .attr-block{margin-top:6px}
 @media (max-width: 720px){
+  .latest-split{grid-template-columns:1fr}
+  .latest-block + .latest-block{border-top:1px solid var(--border);padding-top:10px}
   .price-split.has-gola{grid-template-columns:1fr}
   .price-split.has-gola .price-block:first-child{border-right:none;border-bottom:1px solid var(--border);padding-bottom:10px}
 }
@@ -205,13 +211,18 @@ details.history[open] summary:before{transform:rotate(90deg)}
 .cell-rate .cell-val{color:darkred;font-weight:900}
 .cell-empty{font-weight:900;color:#94a3b8}
 
+.kv{display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:1.25}
+.kv-row{display:flex;justify-content:space-between;gap:10px}
+.k{color:var(--muted);font-weight:700}
+.v{color:#0f172a;font-weight:800;text-align:right;word-break:break-word}
+
 /* Tables (Matrix view) */
 .table-wrapper{width:100%;overflow:auto;margin-top:12px}
 .table-wrapper table{width:100%;border-collapse:collapse;margin-top:0;table-layout:fixed}
 .table-wrapper th,.table-wrapper td{border:1px solid var(--border);padding:10px 10px;text-align:left;vertical-align:top}
 .table-wrapper thead th{background:#f1f5f9;color:#1e293b;font-weight:800}
 .table-wrapper thead .sub th{font-weight:600;font-size:12px}
-.wef-cell{white-space:normal;min-width:250px}
+.wef-cell{white-space:normal;min-width:250px;word-break:break-word}
 .gola-price{color:#166534;font-weight:800}
 .golaGreen{color:#166534;font-weight:800}
 .gola-line{margin-top:6px;font-size:13px;font-weight:700}
