@@ -219,43 +219,91 @@ async function init() {
   }
 }
 
-/* ========= Load dealer rates ========= */
-async function loadDealerRates() {
+/* ========= Load dealer rates (AUTO REFRESH READY) ========= */
+async function loadDealerRates(opts = {}) {
+  const silent = !!opts.silent;
+
+  // ---- internal auto-refresh helpers (no extra patches needed) ----
+  const AUTO_REFRESH_MS = 20000;
+
+  function startAutoRefresh() {
+    // Restart interval cleanly
+    if (loadDealerRates._autoId) clearInterval(loadDealerRates._autoId);
+
+    loadDealerRates._autoId = setInterval(() => {
+      // prevent overlapping refresh calls
+      if (loadDealerRates._isAutoFetching) return;
+
+      const dealerNow = $("#dealerSelect")?.value?.trim();
+      if (!dealerNow) return; // no dealer selected
+
+      loadDealerRates._isAutoFetching = true;
+      loadDealerRates({ silent: true })
+        .catch(() => {}) // silent refresh me errors ignore
+        .finally(() => {
+          loadDealerRates._isAutoFetching = false;
+        });
+    }, AUTO_REFRESH_MS);
+
+    // cleanup on unload (optional but nice)
+    if (!loadDealerRates._cleanupBound) {
+      loadDealerRates._cleanupBound = true;
+      window.addEventListener("beforeunload", () => {
+        if (loadDealerRates._autoId) clearInterval(loadDealerRates._autoId);
+      });
+    }
+  }
+
   const dealer = $("#dealerSelect")?.value?.trim();
-  if (!dealer) return showToast("Select dealer", "error");
+  if (!dealer) {
+    if (!silent) showToast("Select dealer", "error");
+    return;
+  }
 
   const btn = $("#getDataBtn");
+
   try {
-    setBtnLoading(btn, true);
-    showPageLoader(true);
+    if (!silent) {
+      setBtnLoading(btn, true);
+      showPageLoader(true);
+    }
 
     const res = await safeFetch(
       `${API_URL}?action=getDealerRates&dealer=${encodeURIComponent(dealer)}`
     );
+
     const d = await res.json();
     if (!d.ok) throw new Error("Bad dealer data");
 
     LAST_DATA = d;
 
-    // default: latest WEF + compact
-    VIEW_MODE = $("#viewMode")?.value || "compact";
-    WEF_MODE = $("#filterWef")?.value || "latest";
+    // keep user's current UI selections (and fallback safely)
+    VIEW_MODE = $("#viewMode")?.value || VIEW_MODE || "compact";
+    WEF_MODE = $("#filterWef")?.value || WEF_MODE || "latest";
 
     $("#ratesArea")?.classList.remove("hide");
+
+    // (safe) option fills + render
     fillCategoryOptions();
     fillProductOptions();
     fillWefOptions();
 
     renderRatesView(getViewData());
     applyFilters();
+
+    // auto refresh starts only after a successful manual load
+    if (!silent) startAutoRefresh();
   } catch (err) {
     console.error(err);
-    showToast("Error loading dealer data", "error");
+    if (!silent) showToast("Error loading dealer data", "error");
   } finally {
-    setBtnLoading(btn, false);
-    showPageLoader(false);
+    if (!silent) {
+      setBtnLoading(btn, false);
+      showPageLoader(false);
+    }
   }
 }
+
 
 /* ========= Filters ========= */
 function bindFiltersOnce() {
