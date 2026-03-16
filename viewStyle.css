@@ -114,6 +114,11 @@ input:focus,select:focus{border-color:#93c5fd;box-shadow:0 0 0 3px rgba(59,130,2
   background:#fff;
   box-shadow:0 4px 10px var(--shadow);
 }
+.product-card.old-rate {
+  border-color: #a855f7;
+  background: linear-gradient(135deg, #faf5ff, #f3e8ff);
+  box-shadow: 0 4px 10px rgba(168, 85, 247, 0.1);
+}
 .product-header{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:8px}
 .product-title{font-weight:700;color:var(--brand-dark);font-size:15px;line-height:1.2}
 .product-meta{font-size:12.5px;color:var(--muted)}
@@ -123,6 +128,11 @@ input:focus,select:focus{border-color:#93c5fd;box-shadow:0 0 0 3px rgba(59,130,2
   background:#eff6ff;border:1px solid #dbeafe;color:var(--brand-dark);
   font-size:12px;font-weight:700;
   white-space:nowrap;
+}
+.product-card.old-rate .badge {
+  background: #a855f7;
+  border-color: #a855f7;
+  color: white;
 }
 
 /* Current rate block */
