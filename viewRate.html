@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>View Rates</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="viewStyle.css"/>
+</head>
+<body>
+  <div class="container">
+    <div class="page-head">
+      <h1>View Rates</h1>
+      <div class="muted">Fast, compact view (Latest WEF by default). Expand history only when needed.</div>
+    </div>
+
+    <!-- Dealer selection -->
+    <section class="card">
+      <div class="form-row wrap">
+        <input id="dealerSelect" list="dealersList" placeholder="Search dealer… (e.g., sal)"/>
+        <datalist id="dealersList"></datalist>
+        <button id="getDataBtn" class="btn" onclick="loadDealerRates()">
+          <span class="btn__label">View Rates</span>
+          <span class="btn__spinner" aria-hidden="true"></span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Rates Area -->
+    <section id="ratesArea" class="hide">
+      <!-- Toolbar -->
+      <section class="card toolbar" style="margin-top:12px;">
+        <div class="form-row wrap gap">
+          <label>Category
+            <select id="filterCategory">
+              <option value="">All</option>
+            </select>
+          </label>
+
+          <label>Product
+            <select id="filterProduct">
+              <option value="">All</option>
+            </select>
+          </label>
+
+          <label>Search
+            <input id="searchInput" placeholder="Search product / size…" />
+          </label>
+
+          <label>WEF
+            <select id="filterWef">
+              <option value="latest">Latest only</option>
+              <option value="all">All history</option>
+            </select>
+          </label>
+
+          <label>View
+            <select id="viewMode">
+              <option value="compact" selected>Compact</option>
+              <option value="matrix">Matrix</option>
+            </select>
+          </label>
+
+          <button id="toggleNoRate" class="btn btn-outline" type="button">Hide no-rate</button>
+
+          <div class="result-pill">
+            <span class="dot"></span>
+            <span id="resultCount">0</span>
+          </div>
+        </div>
+
+        <div class="hint">
+          Tip: <b>Compact</b> view shows latest WEF in big font; click <b>History</b> to expand older rates.
+          <span class="sep">•</span>
+          In Matrix view, use <b>WEF = Latest</b> to avoid horizontal scrolling.
+        </div>
+      </section>
+
+      <!-- Desktop table (Matrix view only) -->
+      <div class="table-wrapper hide" id="ratesTableWrap">
+        <div id="ratesTable"></div>
+      </div>
+
+      <!-- Cards (Compact view + Mobile fallback) -->
+      <div id="ratesCards" class="cards-wrapper"></div>
+
+      <!-- Hidden dummy globals (safe to keep for compatibility) -->
+      <div style="display:none">
+        <select id="applyTerm"><option value="all">All</option></select>
+        <select id="termSelect"><option value="15">15</option></select>
+        <select id="applyBrand"><option value="all">All</option></select>
+        <select id="brandGlobal"><option value="All">All</option></select>
+        <select id="applyGst"><option value="all">All</option></select>
+        <select id="gstGlobal"><option value="Paid">Paid</option></select>
+        <select id="applyFreight"><option value="all">All</option></select>
+        <select id="freightGlobal"><option value="Extra">Extra</option></select>
+        <select id="applyCd"><option value="all">All</option></select>
+        <select id="cdGlobal"><option value="Net Rates">Net Rates</option></select>
+      </div>
+    </section>
+  </div>
+
+  <!-- Page loader -->
+  <div id="pageLoader" class="page-loader hide" aria-hidden="true">
+    <div class="spinner-xl"></div>
+  </div>
+
+  <!-- Centered toast -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="viewRates.js"></script>
+</body>
+</html>
