@@ -277,11 +277,21 @@ async function loadDealerRates(opts = {}) {
 
     LAST_DATA = d;
 
-    // keep user's current UI selections (and fallback safely)
-    VIEW_MODE = $("#viewMode")?.value || VIEW_MODE || "compact";
-    WEF_MODE = $("#filterWef")?.value || WEF_MODE || "latest";
+    // Set defaults as per requirements: Hide No Rates = ON, View mode = Compact, Date dropdown = Latest Only
+    HIDE_NO_RATE = true;
+    VIEW_MODE = "compact";
+    WEF_MODE = "latest";
 
-    $("#ratesArea")?.classList.remove("hide");
+    // Update UI to reflect defaults
+    const viewSel = $("#viewMode");
+    if (viewSel) viewSel.value = "compact";
+    const wefSel = $("#filterWef");
+    if (wefSel) wefSel.value = "latest";
+    const noRateBtn = $("#toggleNoRate");
+    if (noRateBtn) {
+      noRateBtn.classList.add("active");
+      noRateBtn.textContent = "Show no-rate";
+    }
 
     // (safe) option fills + render
     fillCategoryOptions();
@@ -644,6 +654,12 @@ function renderCards(data) {
     card.dataset.search = `${p.category || ""} ${p.product || ""} ${p.size || ""}`;
     card.dataset.hasRate = hasAnyRate ? "1" : "0";
 
+    // Add old-rate class if W.E.F. is before 16-03-2026
+    const isOldRate = showWef && showWef < "2026-03-16";
+    if (isOldRate) {
+      card.classList.add("old-rate");
+    }
+
     const header = document.createElement("div");
     header.className = "product-header";
     header.innerHTML = `
@@ -651,7 +667,7 @@ function renderCards(data) {
         <div class="product-title">${escHtml(p.product || "")}</div>
         <div class="product-meta">${escHtml(p.category || "")} > ${escHtml(p.size || "")}</div>
       </div>
-      <div class="badge">${showWef ? `WEF ${escHtml(showWef)}` : "WEF --"}</div>
+      <div class="badge">${showWef ? `WEF ${escHtml(showWef)}${isOldRate ? " (Old Rate)" : ""}` : "WEF --"}</div>
     `;
     card.appendChild(header);
 
