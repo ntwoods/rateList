@@ -1,5 +1,16 @@
 // viewRates.js
-const API_URL = "https://script.google.com/macros/s/AKfycbybdjvFUnSGOqUeE2RWsqHBHmmC_KXG3JXxLMYH7zVDd8tmZZ3i_cw-SfwFVTaBfmVD/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbyaIUmvKpAp1h7moft2bBKiYQDulSOyw6TJ6blf0gP97qC78yTvAGPHeXfGsgEb8oX-/exec";
+
+const VIEW_INIT_ACTION = "getViewInitialData";
+const VIEW_RATES_ACTION = "getViewDealerRates";
+const LEGACY_INIT_ACTION = "getInitialData";
+const LEGACY_RATES_ACTION = "getDealerRates";
+
+const DEFAULT_VIEW_MODE = "compact";
+const DEFAULT_WEF_MODE = "latest";
+const DEFAULT_HIDE_NO_RATE = true;
+const OLD_RATE_CUTOFF = new Date(2026, 2, 16); // 16-03-2026
+const NO_VALUE_TEXT = "—";
 
 /* ========= Helpers ========= */
 const $ = (sel) => document.querySelector(sel);
@@ -49,23 +60,79 @@ function debounce(fn, ms = 200) {
   };
 }
 
-function isBlank(v) {
-  return v === null || v === undefined || String(v).trim() === "";
+function fetchJson(url) {
+  return safeFetch(url).then((res) => res.json());
+}
+
+function parseWefDateSafe(value) {
+  if (!value) return null;
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  let match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    return createValidDate_(Number(match[1]), Number(match[2]), Number(match[3]));
+  }
+
+  match = raw.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (match) {
+    return createValidDate_(Number(match[3]), Number(match[2]), Number(match[1]));
+  }
+
+  const fallback = new Date(raw);
+  if (Number.isNaN(fallback.getTime())) return null;
+  return new Date(fallback.getFullYear(), fallback.getMonth(), fallback.getDate());
+}
+
+function createValidDate_(year, month, day) {
+  const d = new Date(year, month - 1, day);
+  if (
+    d.getFullYear() !== year ||
+    d.getMonth() !== month - 1 ||
+    d.getDate() !== day
+  ) {
+    return null;
+  }
+  return d;
+}
+
+function isOldRateWef(wef) {
+  const d = parseWefDateSafe(wef);
+  if (!d) return false;
+  return d.getTime() < OLD_RATE_CUTOFF.getTime();
+}
+
+function toProductKey(item) {
+  return `${item?.product || ""}||${item?.category || ""}||${item?.size || ""}`;
 }
 
 function isValidRate(val) {
   if (val === null || val === undefined) return false;
   const s = String(val).trim();
-  if (!s || s === "—") return false;
+  if (!s || s === NO_VALUE_TEXT) return false;
   const n = Number(s);
   if (!Number.isNaN(n) && n === 0) return false;
   return true;
 }
 
+function hasRateCell(cell) {
+  return !!(cell && isValidRate(cell.rate));
+}
+
+function hasGolaCell(cell) {
+  const add = cell?.golaAddPrice ?? cell?.golaAdd ?? cell?.gola;
+  return isValidRate(cell?.rate) && isValidRate(add);
+}
+
 function formatValue(val) {
   if (val === 0) return "0";
   const s = String(val ?? "").trim();
-  return s && s !== "—" ? s : "—";
+  return s && s !== NO_VALUE_TEXT ? s : NO_VALUE_TEXT;
 }
 
 function formatNumber_(n) {
@@ -75,132 +142,96 @@ function formatNumber_(n) {
 }
 
 function formatGolaPrice(base, add) {
-  if (!isValidRate(base) || !isValidRate(add)) return "—";
+  if (!isValidRate(base) || !isValidRate(add)) return NO_VALUE_TEXT;
   const baseNum = Number(base);
   const addNum = Number(add);
-  if (Number.isNaN(baseNum) || Number.isNaN(addNum)) return "—";
+  if (Number.isNaN(baseNum) || Number.isNaN(addNum)) return NO_VALUE_TEXT;
   const total = baseNum + addNum;
   return `${formatNumber_(baseNum)} + ${formatNumber_(addNum)} = ${formatNumber_(total)}`;
 }
 
 function formatTermValue(val) {
   const s = formatValue(val);
-  if (s === "—") return s;
+  if (s === NO_VALUE_TEXT) return s;
   return s.endsWith("d") ? s : `${s}d`;
 }
 
 function formatCd(cell) {
-  if (!cell) return "—";
+  if (!cell) return NO_VALUE_TEXT;
   const raw = cell.cdValue !== undefined ? cell.cdValue : (cell.cd !== undefined ? cell.cd : "");
   const cleaned = formatValue(raw);
-  return cleaned === "—" ? "Net Rates" : cleaned;
-}
-
-function extractLatestRecord(item, data = LAST_DATA) {
-  if (!data || !item) return { wef: "", cell: null };
-  const allWefs = Array.isArray(data._wefAll)
-    ? data._wefAll
-    : (Array.isArray(data.wefDates) ? data.wefDates : []);
-  const key = `${item.product}||${item.category}||${item.size}`;
-  for (let i = allWefs.length - 1; i >= 0; i--) {
-    const wef = allWefs[i];
-    const cell = data.rates?.[wef]?.[key];
-    if (cell && isValidRate(cell.rate)) return { wef, cell };
-  }
-  return { wef: "", cell: null };
-}
-
-function itemHasAnyRate(item, data = LAST_DATA) {
-  if (!data || !item) return false;
-  const allWefs = Array.isArray(data._wefAll)
-    ? data._wefAll
-    : (Array.isArray(data.wefDates) ? data.wefDates : []);
-  const key = `${item.product}||${item.category}||${item.size}`;
-  return allWefs.some((wef) => isValidRate(data.rates?.[wef]?.[key]?.rate));
+  return cleaned === NO_VALUE_TEXT ? "Net Rates" : cleaned;
 }
 
 function renderKVBlock(attrs) {
   const rows = Array.isArray(attrs)
     ? attrs
     : Object.entries(attrs || {}).map(([k, v]) => ({ k, v }));
+
   const body = rows
     .map(({ k, v }) => {
       return `<div class="kv-row"><span class="k">${escHtml(k)}</span><span class="v">${escHtml(formatValue(v))}</span></div>`;
     })
     .join("");
+
   return `<div class="kv">${body}</div>`;
 }
 
-function renderLatestNormalCell(item, data = LAST_DATA) {
-  const latest = extractLatestRecord(item, data);
-  const cell = latest.cell;
-  const attrs = [
-    { k: "WEF", v: formatValue(latest.wef) },
-    { k: "Rate", v: formatValue(cell?.rate) },
-    { k: "Term", v: formatTermValue(cell?.term) },
-    { k: "GST", v: formatValue(cell?.gstType) },
-    { k: "Freight", v: formatValue(cell?.freight) },
-    { k: "CD", v: cell ? formatCd(cell) : "—" },
-    { k: "Brand", v: formatValue(cell?.brand) }
-  ];
-  return renderKVBlock(attrs);
-}
+function cellStackHtml(cell, opts = {}) {
+  if (!cell) return `<div class="cell-empty">${NO_VALUE_TEXT}</div>`;
 
-function renderLatestGolaCell(item, data = LAST_DATA) {
-  const latest = extractLatestRecord(item, data);
-  const cell = latest.cell;
-  const golaExpr = cell
+  const showGola = !!opts.showGola;
+  const rate = formatValue(cell.rate);
+  const term = formatTermValue(cell.term);
+  const gst = formatValue(cell.gstType);
+  const freight = formatValue(cell.freight);
+  const cd = formatCd(cell);
+  const brand = formatValue(cell.brand);
+  const golaExpr = showGola
     ? formatGolaPrice(cell.rate, cell.golaAddPrice ?? cell.golaAdd ?? cell.gola)
-    : "—";
-  const attrs = [
-    { k: "WEF", v: formatValue(latest.wef) },
-    { k: "Rate", v: golaExpr },
-    { k: "Term", v: formatTermValue(cell?.term) },
-    { k: "GST", v: formatValue(cell?.gstType) },
-    { k: "Freight", v: formatValue(cell?.freight) },
-    { k: "CD", v: cell ? formatCd(cell) : "—" },
-    { k: "Brand", v: formatValue(cell?.brand) }
-  ];
-  return renderKVBlock(attrs);
+    : NO_VALUE_TEXT;
+
+  return `
+    <div class="cell-stack">
+      <div class="cell-line cell-rate"><span class="cell-key">Rate</span><span class="cell-val">${escHtml(rate)}</span></div>
+      <div class="cell-line"><span class="cell-key">Term</span><span class="cell-val">${escHtml(term)}</span></div>
+      <div class="cell-line"><span class="cell-key">GST</span><span class="cell-val">${escHtml(gst)}</span></div>
+      <div class="cell-line"><span class="cell-key">Freight</span><span class="cell-val">${escHtml(freight)}</span></div>
+      <div class="cell-line"><span class="cell-key">CD</span><span class="cell-val">${escHtml(cd)}</span></div>
+      <div class="cell-line"><span class="cell-key">Brand</span><span class="cell-val">${escHtml(brand)}</span></div>
+      ${golaExpr !== NO_VALUE_TEXT ? `<div class="cell-line"><span class="cell-key">Gola Service Price</span><span class="cell-val gola-price golaGreen">${escHtml(golaExpr)}</span></div>` : ""}
+    </div>
+  `;
 }
 
-function hasGolaCell(cell) {
-  const add = cell?.golaAddPrice ?? cell?.golaAdd ?? cell?.gola;
-  return isValidRate(cell?.rate) && isValidRate(add);
-}
-
-function dealerHasAnyGola(data) {
-  if (!data) return false;
-  const allWefs = Array.isArray(data._wefAll)
-    ? data._wefAll
-    : (Array.isArray(data.wefDates) ? data.wefDates : []);
-  for (const wef of allWefs) {
-    const entries = data.rates?.[wef];
-    if (!entries) continue;
-    for (const key of Object.keys(entries)) {
-      if (hasGolaCell(entries[key])) return true;
-    }
-  }
-  return false;
+function getGolaExpression(cell) {
+  if (!cell) return "";
+  const expr = formatGolaPrice(cell.rate, cell.golaAddPrice ?? cell.golaAdd ?? cell.gola);
+  return expr === NO_VALUE_TEXT ? "" : expr;
 }
 
 /* ========= State ========= */
 let LAST_DATA = null;
 let FILTERS_BOUND = false;
+let ACTIVE_RENDER_ROWS = [];
+let FILTER_INDEX = { categories: [], productsByCategory: new Map(), allProducts: [] };
+let VIEW_DATA_CACHE = { source: null, mode: "", data: null };
 
-// UI state
-let VIEW_MODE = "compact"; // compact | matrix
-let WEF_MODE = "latest";   // latest | all | yyyy-mm-dd
+let VIEW_MODE = DEFAULT_VIEW_MODE; // compact | matrix
+let WEF_MODE = DEFAULT_WEF_MODE;   // latest | all | yyyy-mm-dd
 let SEARCH_Q = "";
 let HIDE_NO_RATE = false;
 
-/* ========= Init: load dealers ========= */
+/* ========= Init ========= */
 async function init() {
   try {
     showPageLoader(true);
-    const res = await safeFetch(`${API_URL}?action=getInitialData`);
-    const data = await res.json();
-    if (!data.ok) throw new Error("Init failed");
+
+    let data = await fetchJson(`${API_URL}?action=${VIEW_INIT_ACTION}`);
+    if (!data?.ok) {
+      data = await fetchJson(`${API_URL}?action=${LEGACY_INIT_ACTION}`);
+    }
+    if (!data?.ok) throw new Error("Init failed");
 
     const dl = document.getElementById("dealersList");
     if (dl) {
@@ -211,6 +242,8 @@ async function init() {
         dl.appendChild(o);
       });
     }
+
+    bindFiltersOnce();
   } catch (err) {
     console.error(err);
     showToast("Error loading data", "error");
@@ -219,42 +252,37 @@ async function init() {
   }
 }
 
-/* ========= Load dealer rates (AUTO REFRESH READY) ========= */
+function syncNoRateButton() {
+  const noRateBtn = $("#toggleNoRate");
+  if (!noRateBtn) return;
+  noRateBtn.classList.toggle("active", HIDE_NO_RATE);
+  noRateBtn.textContent = HIDE_NO_RATE ? "Show no-rate" : "Hide no-rate";
+}
+
+function applyManualViewDefaults() {
+  VIEW_MODE = DEFAULT_VIEW_MODE;
+  WEF_MODE = DEFAULT_WEF_MODE;
+  HIDE_NO_RATE = DEFAULT_HIDE_NO_RATE;
+
+  const viewSel = $("#viewMode");
+  if (viewSel) viewSel.value = VIEW_MODE;
+
+  const wefSel = $("#filterWef");
+  if (wefSel) wefSel.value = WEF_MODE;
+
+  syncNoRateButton();
+}
+
+function captureCurrentModesFromUI() {
+  VIEW_MODE = $("#viewMode")?.value || VIEW_MODE || DEFAULT_VIEW_MODE;
+  WEF_MODE = $("#filterWef")?.value || WEF_MODE || DEFAULT_WEF_MODE;
+}
+
+/* ========= Load dealer rates ========= */
 async function loadDealerRates(opts = {}) {
   const silent = !!opts.silent;
-
-  // ---- internal auto-refresh helpers (no extra patches needed) ----
-  const AUTO_REFRESH_MS = 20000;
-
-  function startAutoRefresh() {
-    // Restart interval cleanly
-    if (loadDealerRates._autoId) clearInterval(loadDealerRates._autoId);
-
-    loadDealerRates._autoId = setInterval(() => {
-      // prevent overlapping refresh calls
-      if (loadDealerRates._isAutoFetching) return;
-
-      const dealerNow = $("#dealerSelect")?.value?.trim();
-      if (!dealerNow) return; // no dealer selected
-
-      loadDealerRates._isAutoFetching = true;
-      loadDealerRates({ silent: true })
-        .catch(() => {}) // silent refresh me errors ignore
-        .finally(() => {
-          loadDealerRates._isAutoFetching = false;
-        });
-    }, AUTO_REFRESH_MS);
-
-    // cleanup on unload (optional but nice)
-    if (!loadDealerRates._cleanupBound) {
-      loadDealerRates._cleanupBound = true;
-      window.addEventListener("beforeunload", () => {
-        if (loadDealerRates._autoId) clearInterval(loadDealerRates._autoId);
-      });
-    }
-  }
-
   const dealer = $("#dealerSelect")?.value?.trim();
+
   if (!dealer) {
     if (!silent) showToast("Select dealer", "error");
     return;
@@ -268,31 +296,39 @@ async function loadDealerRates(opts = {}) {
       showPageLoader(true);
     }
 
-    const res = await safeFetch(
-      `${API_URL}?action=getDealerRates&dealer=${encodeURIComponent(dealer)}`
+    let d = await fetchJson(
+      `${API_URL}?action=${VIEW_RATES_ACTION}&dealer=${encodeURIComponent(dealer)}`
     );
 
-    const d = await res.json();
-    if (!d.ok) throw new Error("Bad dealer data");
+    if (!d?.ok) {
+      d = await fetchJson(
+        `${API_URL}?action=${LEGACY_RATES_ACTION}&dealer=${encodeURIComponent(dealer)}`
+      );
+    }
 
-    LAST_DATA = d;
+    if (!d?.ok) throw new Error("Bad dealer data");
 
-    // keep user's current UI selections (and fallback safely)
-    VIEW_MODE = $("#viewMode")?.value || VIEW_MODE || "compact";
-    WEF_MODE = $("#filterWef")?.value || WEF_MODE || "latest";
+    LAST_DATA = normalizeDealerData_(d);
+    VIEW_DATA_CACHE = { source: null, mode: "", data: null };
+    buildFilterIndex();
+
+    if (silent) {
+      captureCurrentModesFromUI();
+    } else {
+      applyManualViewDefaults();
+    }
 
     $("#ratesArea")?.classList.remove("hide");
 
-    // (safe) option fills + render
     fillCategoryOptions();
     fillProductOptions();
     fillWefOptions();
+    syncNoRateButton();
 
     renderRatesView(getViewData());
     applyFilters();
 
-    // auto refresh starts only after a successful manual load
-    if (!silent) startAutoRefresh();
+    if (!silent) startAutoRefresh_();
   } catch (err) {
     console.error(err);
     if (!silent) showToast("Error loading dealer data", "error");
@@ -304,6 +340,41 @@ async function loadDealerRates(opts = {}) {
   }
 }
 
+function normalizeDealerData_(raw) {
+  return {
+    ...raw,
+    products: Array.isArray(raw.products) ? raw.products : [],
+    wefDates: Array.isArray(raw.wefDates) ? raw.wefDates : [],
+    rates: raw.rates || {}
+  };
+}
+
+function startAutoRefresh_() {
+  const AUTO_REFRESH_MS = 20000;
+
+  if (loadDealerRates._autoId) clearInterval(loadDealerRates._autoId);
+
+  loadDealerRates._autoId = setInterval(() => {
+    if (loadDealerRates._isAutoFetching) return;
+
+    const dealerNow = $("#dealerSelect")?.value?.trim();
+    if (!dealerNow) return;
+
+    loadDealerRates._isAutoFetching = true;
+    loadDealerRates({ silent: true })
+      .catch(() => {})
+      .finally(() => {
+        loadDealerRates._isAutoFetching = false;
+      });
+  }, AUTO_REFRESH_MS);
+
+  if (!loadDealerRates._cleanupBound) {
+    loadDealerRates._cleanupBound = true;
+    window.addEventListener("beforeunload", () => {
+      if (loadDealerRates._autoId) clearInterval(loadDealerRates._autoId);
+    });
+  }
+}
 
 /* ========= Filters ========= */
 function bindFiltersOnce() {
@@ -314,8 +385,10 @@ function bindFiltersOnce() {
   const search = $("#searchInput");
   const wefSel = $("#filterWef");
   const viewSel = $("#viewMode");
+  const noRateBtn = $("#toggleNoRate");
 
-  if (!catSel || !prodSel || !search || !wefSel || !viewSel) return;
+  if (!catSel || !prodSel || !search || !wefSel || !viewSel || !noRateBtn) return;
+
   FILTERS_BOUND = true;
 
   catSel.addEventListener("change", () => {
@@ -336,75 +409,91 @@ function bindFiltersOnce() {
   );
 
   wefSel.addEventListener("change", () => {
-    WEF_MODE = wefSel.value || "latest";
-    fillWefOptions(); // keep selection stable if list changes
+    WEF_MODE = wefSel.value || DEFAULT_WEF_MODE;
     renderRatesView(getViewData());
     applyFilters();
   });
 
   viewSel.addEventListener("change", () => {
-    VIEW_MODE = viewSel.value || "compact";
+    VIEW_MODE = viewSel.value || DEFAULT_VIEW_MODE;
     renderRatesView(getViewData());
     applyFilters();
   });
 
-  // Hide items with no rates (toggle)
-  const noRateBtn = $("#toggleNoRate");
-  if (noRateBtn) {
-    const sync = () => {
-      noRateBtn.classList.toggle("active", HIDE_NO_RATE);
-      noRateBtn.textContent = HIDE_NO_RATE ? "Show no-rate" : "Hide no-rate";
-    };
-    sync();
-    noRateBtn.addEventListener("click", () => {
-      HIDE_NO_RATE = !HIDE_NO_RATE;
-      sync();
-      applyFilters();
-    });
-  }
+  noRateBtn.addEventListener("click", () => {
+    HIDE_NO_RATE = !HIDE_NO_RATE;
+    syncNoRateButton();
+    applyFilters();
+  });
+
+  syncNoRateButton();
+}
+
+function buildFilterIndex() {
+  const products = LAST_DATA?.products || [];
+  const categorySet = new Set();
+  const productsByCategory = new Map();
+  const allProducts = new Set();
+
+  products.forEach((p) => {
+    const category = String(p.category || "").trim();
+    const product = String(p.product || "").trim();
+    if (category) categorySet.add(category);
+    if (product) allProducts.add(product);
+
+    const catKey = norm(category);
+    if (!productsByCategory.has(catKey)) productsByCategory.set(catKey, new Set());
+    if (product) productsByCategory.get(catKey).add(product);
+  });
+
+  FILTER_INDEX = {
+    categories: Array.from(categorySet).sort((a, b) => a.localeCompare(b)),
+    productsByCategory,
+    allProducts: Array.from(allProducts).sort((a, b) => a.localeCompare(b))
+  };
 }
 
 function fillCategoryOptions() {
   const catSel = $("#filterCategory");
-  if (!catSel || !LAST_DATA) return;
+  if (!catSel) return;
 
   const current = catSel.value || "";
-  const cats = Array.from(
-    new Set((LAST_DATA.products || []).map((p) => p.category).filter(Boolean))
-  ).sort((a, b) => String(a).localeCompare(String(b)));
+  const cats = FILTER_INDEX.categories;
 
   catSel.innerHTML =
     `<option value="">All</option>` +
-    cats
-      .map((c) => `<option value="${escHtml(c)}">${escHtml(c)}</option>`)
-      .join("");
+    cats.map((c) => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join("");
 
-  if (current && cats.includes(current)) catSel.value = current;
+  if (current && cats.includes(current)) {
+    catSel.value = current;
+  } else if (current) {
+    catSel.value = "";
+  }
 }
 
 function fillProductOptions() {
   const catSel = $("#filterCategory");
   const prodSel = $("#filterProduct");
-  if (!prodSel || !LAST_DATA) return;
+  if (!prodSel) return;
 
-  const selectedCat = catSel?.value || "";
+  const selectedCat = String(catSel?.value || "").trim();
   const current = prodSel.value || "";
 
-  const base = selectedCat
-    ? (LAST_DATA.products || []).filter((p) => norm(p.category) === norm(selectedCat))
-    : (LAST_DATA.products || []);
-
-  const prods = Array.from(new Set(base.map((p) => p.product).filter(Boolean)))
-    .sort((a, b) => String(a).localeCompare(String(b)));
+  let products = FILTER_INDEX.allProducts;
+  if (selectedCat) {
+    const perCat = FILTER_INDEX.productsByCategory.get(norm(selectedCat));
+    products = perCat ? Array.from(perCat).sort((a, b) => a.localeCompare(b)) : [];
+  }
 
   prodSel.innerHTML =
     `<option value="">All</option>` +
-    prods
-      .map((p) => `<option value="${escHtml(p)}">${escHtml(p)}</option>`)
-      .join("");
+    products.map((p) => `<option value="${escHtml(p)}">${escHtml(p)}</option>`).join("");
 
-  if (current && prods.includes(current)) prodSel.value = current;
-  else if (current) prodSel.value = "";
+  if (current && products.includes(current)) {
+    prodSel.value = current;
+  } else if (current) {
+    prodSel.value = "";
+  }
 }
 
 function fillWefOptions() {
@@ -412,24 +501,28 @@ function fillWefOptions() {
   if (!wefSel || !LAST_DATA) return;
 
   const all = Array.isArray(LAST_DATA.wefDates) ? LAST_DATA.wefDates : [];
-  const current = WEF_MODE || wefSel.value || "latest";
+  const current = WEF_MODE || wefSel.value || DEFAULT_WEF_MODE;
 
-  const opts = [];
-  opts.push(`<option value="latest">Latest only</option>`);
-  opts.push(`<option value="all">All history</option>`);
+  const opts = [
+    `<option value="latest">Latest only</option>`,
+    `<option value="all">All history</option>`
+  ];
+
   if (all.length) {
-    opts.push(`<option value="" disabled>──────────</option>`);
+    opts.push(`<option value="" disabled>----------</option>`);
     all.slice().reverse().forEach((d) => {
       opts.push(`<option value="${escHtml(d)}">${escHtml(d)}</option>`);
     });
   }
 
   wefSel.innerHTML = opts.join("");
+
   if (current && (current === "latest" || current === "all" || all.includes(current))) {
     wefSel.value = current;
+    WEF_MODE = current;
   } else {
-    wefSel.value = "latest";
-    WEF_MODE = "latest";
+    wefSel.value = DEFAULT_WEF_MODE;
+    WEF_MODE = DEFAULT_WEF_MODE;
   }
 }
 
@@ -439,70 +532,135 @@ function setResultCount(n) {
 }
 
 function applyFilters() {
-  const cat = $("#filterCategory")?.value || "";
-  const prod = $("#filterProduct")?.value || "";
+  const cat = norm($("#filterCategory")?.value || "");
+  const prod = norm($("#filterProduct")?.value || "");
   const q = norm(SEARCH_Q);
 
   let visible = 0;
 
-  // Cards
-  document.querySelectorAll(".product-card").forEach((card) => {
+  for (const row of ACTIVE_RENDER_ROWS) {
     const ok =
-      (!cat || norm(card.dataset.category) === norm(cat)) &&
-      (!prod || norm(card.dataset.product) === norm(prod)) &&
-      (!q || norm(card.dataset.search || "").includes(q)) &&
-      (!HIDE_NO_RATE || card.dataset.hasRate === "1");
+      (!cat || row.categoryNorm === cat) &&
+      (!prod || row.productNorm === prod) &&
+      (!q || row.searchNorm.includes(q)) &&
+      (!HIDE_NO_RATE || row.hasRate);
 
-    card.style.display = ok ? "" : "none";
+    row.el.style.display = ok ? "" : "none";
     if (ok) visible++;
-  });
-
-  // Table rows (matrix)
-  const table = $("#ratesTable")?.querySelector("table");
-  if (table) {
-    visible = 0;
-    table.querySelectorAll("tbody tr").forEach((tr) => {
-      const tds = tr.querySelectorAll("td");
-      const rowCat = tds[0]?.textContent ?? "";
-      const rowProd = tds[1]?.textContent ?? "";
-      const rowSize = tds[2]?.textContent ?? "";
-      const hay = `${rowCat} ${rowProd} ${rowSize}`;
-
-      const ok =
-        (!cat || norm(rowCat) === norm(cat)) &&
-        (!prod || norm(rowProd) === norm(prod)) &&
-        (!q || norm(hay).includes(q)) &&
-        (!HIDE_NO_RATE || tr.dataset.hasRate === "1");
-
-      tr.style.display = ok ? "" : "none";
-      if (ok) visible++;
-    });
   }
 
   setResultCount(visible);
 }
 
-/* ========= ViewData (WEF filter) ========= */
+/* ========= ViewData (WEF filter + derived indexes) ========= */
 function getViewData() {
   if (!LAST_DATA) return null;
 
+  if (
+    VIEW_DATA_CACHE.source === LAST_DATA &&
+    VIEW_DATA_CACHE.mode === WEF_MODE &&
+    VIEW_DATA_CACHE.data
+  ) {
+    return VIEW_DATA_CACHE.data;
+  }
+
   const all = Array.isArray(LAST_DATA.wefDates) ? LAST_DATA.wefDates : [];
-  if (!all.length) return { ...LAST_DATA, _wefMode: "none", _wefAll: [] };
+  let data;
 
-  // NOTE:
-  // - For Latest-only mode, we DO NOT shrink wefDates to one global date.
-  //   We compute latest WEF per-item from _wefAll, so items with older latest still show.
-  // - For All-history mode, we keep all dates.
-  // - For a specific WEF date, we show that one date only.
+  if (!all.length) {
+    data = { ...LAST_DATA, _wefMode: "none", _wefAll: [] };
+  } else if (WEF_MODE === "latest") {
+    data = { ...LAST_DATA, wefDates: all, _wefMode: "latest", _wefAll: all };
+  } else if (WEF_MODE === "all") {
+    data = { ...LAST_DATA, wefDates: all, _wefMode: "all", _wefAll: all };
+  } else {
+    data = {
+      ...LAST_DATA,
+      wefDates: [WEF_MODE],
+      _wefMode: "single",
+      _wefAll: all,
+      _selectedWef: WEF_MODE
+    };
+  }
 
-  if (WEF_MODE === "latest") {
-    return { ...LAST_DATA, wefDates: all, _wefMode: "latest", _wefAll: all };
+  data._derived = buildDerivedData_(data);
+  data._hasGola = data._derived.hasDealerGola;
+
+  VIEW_DATA_CACHE = { source: LAST_DATA, mode: WEF_MODE, data };
+  return data;
+}
+
+function buildDerivedData_(data) {
+  const products = Array.isArray(data.products) ? data.products : [];
+  const allWefs = Array.isArray(data._wefAll)
+    ? data._wefAll
+    : (Array.isArray(data.wefDates) ? data.wefDates : []);
+
+  const productMeta = {};
+  let hasDealerGola = false;
+
+  products.forEach((item) => {
+    const key = toProductKey(item);
+    const wefsWithRate = [];
+
+    let latestWef = "";
+    let latestCell = null;
+    let hasAnyRate = false;
+
+    for (let i = 0; i < allWefs.length; i++) {
+      const wef = allWefs[i];
+      const cell = data.rates?.[wef]?.[key];
+
+      if (!hasDealerGola && hasGolaCell(cell)) {
+        hasDealerGola = true;
+      }
+
+      if (hasRateCell(cell)) {
+        hasAnyRate = true;
+        wefsWithRate.push(wef);
+        latestWef = wef;
+        latestCell = cell;
+      }
+    }
+
+    productMeta[key] = {
+      hasAnyRate,
+      wefsWithRate,
+      latestWef,
+      latestCell
+    };
+  });
+
+  return { productMeta, hasDealerGola };
+}
+
+function getProductMeta_(data, key) {
+  return data?._derived?.productMeta?.[key] || null;
+}
+
+function extractLatestRecord(item, data = LAST_DATA) {
+  if (!data || !item) return { wef: "", cell: null };
+
+  const meta = getProductMeta_(data, toProductKey(item));
+  if (meta) {
+    return {
+      wef: meta.latestWef || "",
+      cell: meta.latestCell || null
+    };
   }
-  if (WEF_MODE === "all") {
-    return { ...LAST_DATA, wefDates: all, _wefMode: "all", _wefAll: all };
-  }
-  // specific date
-  return { ...LAST_DATA, wefDates: [WEF_MODE], _wefMode: "single", _wefAll: all, _selectedWef: WEF_MODE };
+
+  return { wef: "", cell: null };
+}
+
+function itemHasAnyRate(item, data = LAST_DATA) {
+  if (!data || !item) return false;
+  const meta = getProductMeta_(data, toProductKey(item));
+  return !!meta?.hasAnyRate;
+}
+
+function listWefsWithRate(data, key) {
+  const meta = getProductMeta_(data, key);
+  return meta ? meta.wefsWithRate.slice() : [];
 }
 
 /* ========= Responsive renderer ========= */
@@ -510,116 +668,77 @@ function renderRatesView(data) {
   if (!data) return;
 
   bindFiltersOnce();
-  fillCategoryOptions();
-  fillProductOptions();
-  fillWefOptions();
-  data._hasGola = dealerHasAnyGola(data);
 
   const wantsMatrix = VIEW_MODE === "matrix" && !isMobile();
 
   if (wantsMatrix) {
     $("#ratesTableWrap")?.classList.remove("hide");
     $("#ratesCards")?.classList.add("hide");
-    if (data._wefMode === "latest") renderTableLatest(data);
-    else renderTable(data);
+    ACTIVE_RENDER_ROWS = data._wefMode === "latest" ? renderTableLatest(data) : renderTable(data);
   } else {
     $("#ratesTableWrap")?.classList.add("hide");
     $("#ratesCards")?.classList.remove("hide");
-    renderCards(data);
+    ACTIVE_RENDER_ROWS = renderCards(data);
   }
 }
 
-/* ========= Field formatting ========= */
-function getGolaExpression(cell) {
-  if (!cell) return "";
-  const expr = formatGolaPrice(cell.rate, cell.golaAddPrice ?? cell.golaAdd ?? cell.gola);
-  return expr === "—" ? "" : expr;
+/* ========= Latest-cell renderers ========= */
+function renderLatestNormalCell(item, data = LAST_DATA) {
+  const latest = extractLatestRecord(item, data);
+  const cell = latest.cell;
+
+  const attrs = [
+    { k: "WEF", v: formatValue(latest.wef) },
+    { k: "Rate", v: formatValue(cell?.rate) },
+    { k: "Term", v: formatTermValue(cell?.term) },
+    { k: "GST", v: formatValue(cell?.gstType) },
+    { k: "Freight", v: formatValue(cell?.freight) },
+    { k: "CD", v: cell ? formatCd(cell) : NO_VALUE_TEXT },
+    { k: "Brand", v: formatValue(cell?.brand) }
+  ];
+
+  return renderKVBlock(attrs);
 }
 
-function cellStackHtml(cell, opts = {}) {
-  if (!cell) return `<div class="cell-empty">—</div>`;
-  const showGola = !!opts.showGola;
+function renderLatestGolaCell(item, data = LAST_DATA) {
+  const latest = extractLatestRecord(item, data);
+  const cell = latest.cell;
 
-  const rate = formatValue(cell.rate);
-  const term = formatTermValue(cell.term);
-  const gst = formatValue(cell.gstType);
-  const freight = formatValue(cell.freight);
-  const cd = formatCd(cell);
-  const brand = formatValue(cell.brand);
-  const golaExpr = showGola
+  const golaExpr = cell
     ? formatGolaPrice(cell.rate, cell.golaAddPrice ?? cell.golaAdd ?? cell.gola)
-    : "—";
+    : NO_VALUE_TEXT;
 
-  return `
-    <div class="cell-stack">
-      <div class="cell-line cell-rate"><span class="cell-key">Rate</span><span class="cell-val">${escHtml(rate)}</span></div>
-      <div class="cell-line"><span class="cell-key">Term</span><span class="cell-val">${escHtml(term)}</span></div>
-      <div class="cell-line"><span class="cell-key">GST</span><span class="cell-val">${escHtml(gst)}</span></div>
-      <div class="cell-line"><span class="cell-key">Freight</span><span class="cell-val">${escHtml(freight)}</span></div>
-      <div class="cell-line"><span class="cell-key">CD</span><span class="cell-val">${escHtml(cd)}</span></div>
-      <div class="cell-line"><span class="cell-key">Brand</span><span class="cell-val">${escHtml(brand)}</span></div>
-      ${golaExpr !== "—" ? `<div class="cell-line"><span class="cell-key">Gola Service Price</span><span class="cell-val gola-price golaGreen">${escHtml(golaExpr)}</span></div>` : ""}
-    </div>
-  `;
-}
+  const attrs = [
+    { k: "WEF", v: formatValue(latest.wef) },
+    { k: "Rate", v: golaExpr },
+    { k: "Term", v: formatTermValue(cell?.term) },
+    { k: "GST", v: formatValue(cell?.gstType) },
+    { k: "Freight", v: formatValue(cell?.freight) },
+    { k: "CD", v: cell ? formatCd(cell) : NO_VALUE_TEXT },
+    { k: "Brand", v: formatValue(cell?.brand) }
+  ];
 
-function pillsHtml(cell, opts = {}) {
-  const wef = formatValue(opts.wef);
-  const term = cell ? formatTermValue(cell.term) : "—";
-  const gst = cell ? formatValue(cell.gstType) : "—";
-  const freight = cell ? formatValue(cell.freight) : "—";
-  const cd = cell ? formatCd(cell) : "—";
-  const brand = cell ? formatValue(cell.brand) : "—";
-
-  return `
-    <div class="pills">
-      ${wef !== "—" ? `<span class="pill"><span class="k">WEF</span><span class="v">${escHtml(wef)}</span></span>` : ""}
-      <span class="pill"><span class="k">Term</span><span class="v">${escHtml(term)}</span></span>
-      <span class="pill gst"><span class="k">GST</span><span class="v">${escHtml(gst)}</span></span>
-      <span class="pill"><span class="k">Freight</span><span class="v">${escHtml(freight)}</span></span>
-      <span class="pill cd"><span class="k">CD</span><span class="v">${escHtml(cd)}</span></span>
-      <span class="pill brand"><span class="k">Brand</span><span class="v">${escHtml(brand)}</span></span>
-    </div>
-  `;
-}
-
-/* ========= Rate discovery helpers ========= */
-function hasRateCell(cell) {
-  return !!(cell && isValidRate(cell.rate));
-}
-
-function listWefsWithRate(data, key) {
-  const all = Array.isArray(data._wefAll) ? data._wefAll : (Array.isArray(data.wefDates) ? data.wefDates : []);
-  return all.filter((wef) => hasRateCell(data.rates?.[wef]?.[key]));
-}
-
-function findLatestForKey(data, key) {
-  const all = Array.isArray(data._wefAll) ? data._wefAll : (Array.isArray(data.wefDates) ? data.wefDates : []);
-  for (let i = all.length - 1; i >= 0; i--) {
-    const wef = all[i];
-    const cell = data.rates?.[wef]?.[key];
-    if (hasRateCell(cell)) return { wef, cell };
-  }
-  return null;
+  return renderKVBlock(attrs);
 }
 
 /* ========= Cards (Compact) ========= */
 function renderCards(data) {
   const cards = $("#ratesCards");
-  if (!cards) return;
-  cards.innerHTML = "";
+  if (!cards) return [];
 
-  // grid on desktop
+  cards.innerHTML = "";
   cards.classList.toggle("product-grid", !isMobile());
 
+  const rows = [];
+  const frag = document.createDocumentFragment();
   const viewWefs = Array.isArray(data.wefDates) ? data.wefDates : [];
-  const allWefs = Array.isArray(data._wefAll) ? data._wefAll : viewWefs;
 
   (data.products || []).forEach((p) => {
-    const key = `${p.product}||${p.category}||${p.size}`;
+    const key = toProductKey(p);
+    const meta = getProductMeta_(data, key);
 
-    const hasAnyRate = itemHasAnyRate(p, { ...data, _wefAll: allWefs });
-    const wefsWithRate = listWefsWithRate({ ...data, _wefAll: allWefs }, key);
+    const hasAnyRate = !!meta?.hasAnyRate;
+    const wefsWithRate = meta?.wefsWithRate || [];
 
     let showWef = "";
     let showCell = null;
@@ -630,14 +749,15 @@ function renderCards(data) {
       showCell = showWef ? data.rates?.[showWef]?.[key] : null;
       modeLabel = showWef ? "Selected" : "No rates";
     } else {
-      const latest = extractLatestRecord(p, { ...data, _wefAll: allWefs });
-      showWef = latest.wef || "";
-      showCell = latest.cell || null;
+      showWef = meta?.latestWef || "";
+      showCell = meta?.latestCell || null;
       modeLabel = showWef ? "Latest" : "No rates";
     }
 
+    const markOldRate = hasRateCell(showCell) && isOldRateWef(showWef);
+
     const card = document.createElement("div");
-    card.className = "product-card";
+    card.className = `product-card${markOldRate ? " old-rate-card" : ""}`;
     card.dataset.category = p.category || "";
     card.dataset.product = p.product || "";
     card.dataset.size = p.size || "";
@@ -651,21 +771,25 @@ function renderCards(data) {
         <div class="product-title">${escHtml(p.product || "")}</div>
         <div class="product-meta">${escHtml(p.category || "")} > ${escHtml(p.size || "")}</div>
       </div>
-      <div class="badge">${showWef ? `WEF ${escHtml(showWef)}` : "WEF --"}</div>
+      <div class="badge-row">
+        <div class="badge">${showWef ? `WEF ${escHtml(showWef)}` : "WEF --"}</div>
+        ${markOldRate ? `<div class="badge old-rate-badge">Old Rate</div>` : ""}
+      </div>
     `;
     card.appendChild(header);
 
-    const normalRate = showCell ? formatValue(showCell.rate) : "—";
+    const normalRate = showCell ? formatValue(showCell.rate) : NO_VALUE_TEXT;
     const hasDealerGola = !!data._hasGola;
     const golaRate = showCell
       ? formatGolaPrice(showCell.rate, showCell.golaAddPrice ?? showCell.golaAdd ?? showCell.gola)
-      : "—";
+      : NO_VALUE_TEXT;
+
     const attrs = [
       { k: "WEF", v: formatValue(showWef) },
       { k: "Term", v: formatTermValue(showCell?.term) },
       { k: "GST", v: formatValue(showCell?.gstType) },
       { k: "Freight", v: formatValue(showCell?.freight) },
-      { k: "CD", v: showCell ? formatCd(showCell) : "—" },
+      { k: "CD", v: showCell ? formatCd(showCell) : NO_VALUE_TEXT },
       { k: "Brand", v: formatValue(showCell?.brand) }
     ];
 
@@ -675,13 +799,13 @@ function renderCards(data) {
       <div class="latest-split ${hasDealerGola ? "" : "single"}">
         <div class="latest-block">
           <div class="price-label">Normal</div>
-          <div class="priceBig ${normalRate === "—" ? "price-empty" : ""}">${escHtml(normalRate)}</div>
+          <div class="priceBig ${normalRate === NO_VALUE_TEXT ? "price-empty" : ""}">${escHtml(normalRate)}</div>
           <div class="muted">${escHtml(modeLabel)}</div>
         </div>
         ${hasDealerGola ? `
           <div class="latest-block">
             <div class="price-label">Gola Service Price</div>
-            <div class="priceBig ${golaRate === "—" ? "price-empty" : "gola-price golaGreen"}">${escHtml(golaRate)}</div>
+            <div class="priceBig ${golaRate === NO_VALUE_TEXT ? "price-empty" : "gola-price golaGreen"}">${escHtml(golaRate)}</div>
           </div>
         ` : ""}
       </div>
@@ -718,15 +842,29 @@ function renderCards(data) {
       }
     }
 
-    cards.appendChild(card);
+    frag.appendChild(card);
+
+    rows.push({
+      el: card,
+      categoryNorm: norm(p.category),
+      productNorm: norm(p.product),
+      searchNorm: norm(`${p.category || ""} ${p.product || ""} ${p.size || ""}`),
+      hasRate: hasAnyRate
+    });
   });
+
+  cards.appendChild(frag);
+  return rows;
 }
+
 /* ========= Table (Matrix) ========= */
 function renderTable(data) {
   const wrap = $("#ratesTable");
-  if (!wrap) return;
+  if (!wrap) return [];
+
   wrap.innerHTML = "";
 
+  const rows = [];
   const tbl = document.createElement("table");
   const thead = document.createElement("thead");
   const headTop = document.createElement("tr");
@@ -766,10 +904,14 @@ function renderTable(data) {
   tbl.appendChild(thead);
 
   const tbody = document.createElement("tbody");
+  const frag = document.createDocumentFragment();
 
   (data.products || []).forEach((p) => {
+    const key = toProductKey(p);
+    const hasAnyRate = !!getProductMeta_(data, key)?.hasAnyRate;
+
     const tr = document.createElement("tr");
-    tr.dataset.hasRate = itemHasAnyRate(p, data) ? "1" : "0";
+    tr.dataset.hasRate = hasAnyRate ? "1" : "0";
 
     const tdCat = document.createElement("td");
     tdCat.textContent = p.category || "";
@@ -784,7 +926,6 @@ function renderTable(data) {
     tr.appendChild(tdSize);
 
     wefs.forEach((wef) => {
-      const key = `${p.product}||${p.category}||${p.size}`;
       const cell = data.rates?.[wef]?.[key];
 
       const tdRate = document.createElement("td");
@@ -801,31 +942,32 @@ function renderTable(data) {
       }
     });
 
-    tbody.appendChild(tr);
+    frag.appendChild(tr);
+
+    rows.push({
+      el: tr,
+      categoryNorm: norm(p.category),
+      productNorm: norm(p.product),
+      searchNorm: norm(`${p.category || ""} ${p.product || ""} ${p.size || ""}`),
+      hasRate: hasAnyRate
+    });
   });
 
+  tbody.appendChild(frag);
   tbl.appendChild(tbody);
   wrap.appendChild(tbl);
-}
 
+  return rows;
+}
 
 /* ========= Table (Latest per-item) ========= */
-function cellStackHtmlWithWef(wef, cell, opts = {}) {
-  if (!cell) return `<div class="cell-stack"><div class="cell-line"><span class="cell-key">WEF</span><span class="cell-val">--</span></div><div class="cell-empty">--</div></div>`;
-  return `
-    <div class="cell-stack">
-      <div class="cell-line"><span class="cell-key">WEF</span><span class="cell-val">${escHtml(wef || "--")}</span></div>
-      ${cellStackHtml(cell, opts)}
-    </div>
-  `;
-}
-
-
 function renderTableLatest(data) {
   const wrap = $("#ratesTable");
-  if (!wrap) return;
+  if (!wrap) return [];
+
   wrap.innerHTML = "";
 
+  const rows = [];
   const tbl = document.createElement("table");
   const thead = document.createElement("thead");
   const trh = document.createElement("tr");
@@ -854,10 +996,14 @@ function renderTableLatest(data) {
   tbl.appendChild(thead);
 
   const tbody = document.createElement("tbody");
-  (data.products || []).forEach((p) => {
-    const tr = document.createElement("tr");
+  const frag = document.createDocumentFragment();
 
-    tr.dataset.hasRate = itemHasAnyRate(p, data) ? "1" : "0";
+  (data.products || []).forEach((p) => {
+    const key = toProductKey(p);
+    const hasAnyRate = !!getProductMeta_(data, key)?.hasAnyRate;
+
+    const tr = document.createElement("tr");
+    tr.dataset.hasRate = hasAnyRate ? "1" : "0";
 
     const tdCat = document.createElement("td");
     tdCat.textContent = p.category || "";
@@ -883,16 +1029,25 @@ function renderTableLatest(data) {
       tr.appendChild(tdGola);
     }
 
-    tbody.appendChild(tr);
+    frag.appendChild(tr);
+
+    rows.push({
+      el: tr,
+      categoryNorm: norm(p.category),
+      productNorm: norm(p.product),
+      searchNorm: norm(`${p.category || ""} ${p.product || ""} ${p.size || ""}`),
+      hasRate: hasAnyRate
+    });
   });
 
+  tbody.appendChild(frag);
   tbl.appendChild(tbody);
   wrap.appendChild(tbl);
+
+  return rows;
 }
 
-
-
-/* ========= Resize: re-render ========= */
+/* ========= Resize ========= */
 window.addEventListener(
   "resize",
   debounce(() => {
