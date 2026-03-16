@@ -1,5 +1,5 @@
 // viewRates.js
-const API_URL = "https://script.google.com/macros/s/AKfycbyaIUmvKpAp1h7moft2bBKiYQDulSOyw6TJ6blf0gP97qC78yTvAGPHeXfGsgEb8oX-/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbzazzIRUjj-G39MAfRWx5fb0SXsP8OAu14nuzUa_tpX4Sj7Q1a2ZopHHh3tj47x_Plx0g/exec";
 
 const VIEW_INIT_ACTION = "getViewInitialData";
 const VIEW_RATES_ACTION = "getViewDealerRates";
