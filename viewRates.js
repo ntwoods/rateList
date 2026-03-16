@@ -1,5 +1,5 @@
 // viewRates.js
-const API_URL = "https://script.google.com/macros/s/AKfycbyaIUmvKpAp1h7moft2bBKiYQDulSOyw6TJ6blf0gP97qC78yTvAGPHeXfGsgEb8oX-/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbybdjvFUnSGOqUeE2RWsqHBHmmC_KXG3JXxLMYH7zVDd8tmZZ3i_cw-SfwFVTaBfmVD/exec";
 
 /* ========= Helpers ========= */
 const $ = (sel) => document.querySelector(sel);
