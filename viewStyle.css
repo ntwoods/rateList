@@ -114,7 +114,18 @@ input:focus,select:focus{border-color:#93c5fd;box-shadow:0 0 0 3px rgba(59,130,2
   background:#fff;
   box-shadow:0 4px 10px var(--shadow);
 }
+.product-card.old-rate-card{
+  border-color:#c084fc;
+  background:linear-gradient(180deg, #fcf5ff 0%, #ffffff 45%);
+  box-shadow:0 8px 18px rgba(126,34,206,.16);
+}
+.product-card.old-rate-card .current{
+  border-color:#d8b4fe;
+  background:#faf5ff;
+}
+.product-card.old-rate-card .product-title{color:#6b21a8}
 .product-header{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:8px}
+.badge-row{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
 .product-title{font-weight:700;color:var(--brand-dark);font-size:15px;line-height:1.2}
 .product-meta{font-size:12.5px;color:var(--muted)}
 .badge{
@@ -123,6 +134,11 @@ input:focus,select:focus{border-color:#93c5fd;box-shadow:0 0 0 3px rgba(59,130,2
   background:#eff6ff;border:1px solid #dbeafe;color:var(--brand-dark);
   font-size:12px;font-weight:700;
   white-space:nowrap;
+}
+.old-rate-badge{
+  background:#7e22ce;
+  border-color:#6b21a8;
+  color:#fff;
 }
 
 /* Current rate block */
@@ -161,20 +177,6 @@ input:focus,select:focus{border-color:#93c5fd;box-shadow:0 0 0 3px rgba(59,130,2
   .price-split.has-gola .price-block:first-child{border-right:none;border-bottom:1px solid var(--border);padding-bottom:10px}
 }
 
-.pills{display:flex;flex-wrap:wrap;gap:8px}
-.pill{
-  display:inline-flex;gap:6px;align-items:center;
-  padding:6px 10px;border-radius:999px;
-  border:1px solid var(--border);
-  background:#fff;
-  font-size:12.5px;
-}
-.pill .k{color:var(--muted);font-weight:700}
-.pill .v{color:var(--ink);font-weight:800}
-.pill.cd .v{color:#0f172a}
-.pill.gst .v{color:#0f172a}
-.pill.brand .v{color:#0f172a}
-
 /* History (details) */
 details.history{margin-top:10px}
 details.history summary{
@@ -187,7 +189,7 @@ details.history summary{
 }
 details.history summary::-webkit-details-marker{display:none}
 details.history summary:before{
-  content:"▸";
+  content:">";
   display:inline-block;
   margin-right:8px;
   color:var(--brand-dark);
@@ -266,7 +268,6 @@ details.history[open] summary:before{transform:rotate(90deg)}
 .toast.success{background:rgba(22,163,74,.95)}
 .toast.error{background:rgba(220,38,38,.95)}
 
-
 /* Outline button (toolbar toggles) */
 .btn.btn-outline{
   background:#fff;
@@ -274,7 +275,10 @@ details.history[open] summary:before{transform:rotate(90deg)}
   border:1px solid var(--border);
   box-shadow:none;
 }
-.btn.btn-outline:hover{background:#eff6ff; transform:translateY(-1px)}
+.btn.btn-outline:hover{background:#eff6ff;transform:translateY(-1px)}
 .btn.btn-outline:active{transform:translateY(0)}
 .btn.btn-outline.active{
-  background:var(--brand
+  background:var(--brand);
+  color:#fff;
+  border-color:var(--brand);
+}
