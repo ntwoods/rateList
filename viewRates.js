@@ -9,7 +9,7 @@ const LEGACY_RATES_ACTION = "getDealerRates";
 const DEFAULT_VIEW_MODE = "compact";
 const DEFAULT_WEF_MODE = "latest";
 const DEFAULT_HIDE_NO_RATE = true;
-const OLD_RATE_CUTOFF = new Date(2026, 2, 15); // 16-03-2026
+const OLD_RATE_CUTOFF = new Date(2026, 2, 29); // As discussed in meeting on 30-03-2026
 const NO_VALUE_TEXT = "—";
 
 /* ========= Helpers ========= */
