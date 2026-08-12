@@ -6,6 +6,8 @@
   <title>View Rates</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://script.google.com">
+  <link rel="preconnect" href="https://script.googleusercontent.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="viewStyle.css"/>
 </head>
@@ -110,6 +112,9 @@
   <!-- Centered toast -->
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="viewRates.js"></script>
+  <script defer src="viewRates.base.js"></script>
+  <script defer src="viewRates.data.js"></script>
+  <script defer src="viewRates.logic.js"></script>
+  <script defer src="viewRates.render.js"></script>
 </body>
 </html>
