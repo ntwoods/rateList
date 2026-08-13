@@ -201,7 +201,7 @@ function hashKey_(value) {
 
 function cacheStem_(type, dealer, extra) {
   const dealerPart = dealer ? hashKey_(dealer) : 'global';
-  return ['vr2', type, dealerPart, extra || '0'].join(':');
+  return ['vr3', type, dealerPart, extra || '0'].join(':');
 }
 
 function cachePutJson_(key, obj, ttlSeconds) {
