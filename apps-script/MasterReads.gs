@@ -32,6 +32,48 @@ function readActiveProducts_() {
   return { products: products, productKeySet: productKeySet };
 }
 
+function normalizeMatchText_(value) {
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeSizeKey_(value) {
+  return normalizeMatchText_(value).replace(/\s*[x×]\s*/g, 'x');
+}
+
+function normalizedProductKey_(product, category, size) {
+  return [
+    normalizeMatchText_(product),
+    normalizeMatchText_(category),
+    normalizeSizeKey_(size)
+  ].join('||');
+}
+
+function buildNormalizedProductLookup_(products) {
+  const lookup = {};
+  (products || []).forEach(function (item) {
+    const normalized = normalizedProductKey_(item.product, item.category, item.size);
+    const canonical = productKey_(item.product, item.category, item.size);
+    if (!normalized) return;
+    if (!Object.prototype.hasOwnProperty.call(lookup, normalized)) {
+      lookup[normalized] = canonical;
+    } else if (lookup[normalized] !== canonical) {
+      lookup[normalized] = null;
+    }
+  });
+  return lookup;
+}
+
+function resolveActiveProductKey_(product, category, size, exactKeySet, normalizedLookup) {
+  const exact = productKey_(product, category, size);
+  if (exactKeySet && exactKeySet.has(exact)) return exact;
+  const normalized = normalizedProductKey_(product, category, size);
+  return normalizedLookup && normalizedLookup[normalized] ? normalizedLookup[normalized] : '';
+}
+
 function getRatesSchema_(sheet, options) {
   const opts = options || {};
   const ensureGolaHeader = opts.ensureGolaHeader !== false;
@@ -106,15 +148,17 @@ function readDealerRows_(sheet, schema, dealerName, lastCol) {
   const rowCount = Math.max(0, sheet.getLastRow() - 1);
   if (!rowCount) return [];
 
-  try {
-    const dealerRange = sheet.getRange(2, schema.indexes.dealer, rowCount, 1);
-    const matches = dealerRange.createTextFinder(dealerName)
-      .matchEntireCell(true)
-      .matchCase(true)
-      .findAll();
+  const targetDealer = normalizeMatchText_(dealerName);
+  if (!targetDealer) return [];
 
-    if (!matches || !matches.length) return [];
-    const rowNumbers = matches.map(function (r) { return r.getRow(); }).sort(function (a, b) { return a - b; });
+  try {
+    const dealerValues = sheet.getRange(2, schema.indexes.dealer, rowCount, 1).getValues();
+    const rowNumbers = [];
+    dealerValues.forEach(function (row, idx) {
+      if (normalizeMatchText_(row[0]) === targetDealer) rowNumbers.push(idx + 2);
+    });
+
+    if (!rowNumbers.length) return [];
     const runs = [];
     let start = rowNumbers[0];
     let previous = start;
@@ -139,7 +183,7 @@ function readDealerRows_(sheet, schema, dealerName, lastCol) {
     return out;
   } catch (e) {
     return safeGetValues(sheet, 2, 1, rowCount, lastCol).filter(function (row) {
-      return String(getRowVal_(row, schema.indexes.dealer)).trim() === dealerName;
+      return normalizeMatchText_(getRowVal_(row, schema.indexes.dealer)) === targetDealer;
     });
   }
 }

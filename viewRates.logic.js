@@ -36,6 +36,13 @@ function bindFiltersOnce() {
         showPageLoader(false);
       }
     }
+
+    const filterSource = WEF_MODE === "latest" ? LAST_DATA : (DEALER_HISTORY_DATA || LAST_DATA);
+    buildFilterIndex(filterSource);
+    fillCategoryOptions();
+    fillProductOptions();
+    fillWefOptions(filterSource);
+
     VIEW_DATA_CACHE = { source: null, mode: "", data: null };
     renderRatesView(getViewData());
     applyFilters();
@@ -57,8 +64,8 @@ function bindFiltersOnce() {
   syncNoRateButton();
 }
 
-function buildFilterIndex() {
-  const products = LAST_DATA?.products || [];
+function buildFilterIndex(data = LAST_DATA) {
+  const products = data?.products || [];
   const categorySet = new Set();
   const productsByCategory = new Map();
   const allProducts = new Set();
@@ -104,10 +111,10 @@ function fillProductOptions() {
   prodSel.value = current && products.includes(current) ? current : "";
 }
 
-function fillWefOptions() {
+function fillWefOptions(data = LAST_DATA) {
   const wefSel = $("#filterWef");
-  if (!wefSel || !LAST_DATA) return;
-  const all = Array.isArray(LAST_DATA.wefDates) ? LAST_DATA.wefDates : [];
+  if (!wefSel || !data) return;
+  const all = Array.isArray(data.wefDates) ? data.wefDates : [];
   const current = WEF_MODE || wefSel.value || DEFAULT_WEF_MODE;
   const opts = [
     `<option value="latest">Latest only</option>`,
@@ -270,6 +277,12 @@ function renderLatestGolaCell(item, data = LAST_DATA) {
   ]);
 }
 
+function sameHistoryCell_(a, b) {
+  if (!a || !b) return false;
+  const fields = ['rate', 'term', 'brand', 'gstType', 'freight', 'cdValue', 'golaAddPrice'];
+  return fields.every((field) => String(a?.[field] ?? '') === String(b?.[field] ?? ''));
+}
+
 function makeHistoryDetails_(item, key, showWef, data) {
   const meta = getProductMeta_(data, key);
   const total = Math.max(0, Number(meta?.historyCount || meta?.wefsWithRate?.length || 0) - (showWef ? 1 : 0));
@@ -288,7 +301,30 @@ function makeHistoryDetails_(item, key, showWef, data) {
     body.innerHTML = `<div class="muted">Loading history…</div>`;
     try {
       const history = await loadProductHistory_(item, key);
-      const others = history.filter((r) => r.wef && r.wef !== showWef).slice().reverse();
+      const currentCell = data?.rates?.[showWef]?.[key] || meta?.latestCell || null;
+      let currentIndex = -1;
+
+      if (showWef) {
+        for (let i = history.length - 1; i >= 0; i--) {
+          if (history[i]?.wef === showWef && sameHistoryCell_(history[i]?.cell, currentCell)) {
+            currentIndex = i;
+            break;
+          }
+        }
+        if (currentIndex < 0) {
+          for (let i = history.length - 1; i >= 0; i--) {
+            if (history[i]?.wef === showWef) {
+              currentIndex = i;
+              break;
+            }
+          }
+        }
+      }
+
+      const others = history
+        .filter((r, idx) => r?.wef && idx !== currentIndex)
+        .slice()
+        .reverse();
       const frag = document.createDocumentFragment();
       others.forEach(({ wef, cell }) => {
         const row = document.createElement("div");
