@@ -1,5 +1,5 @@
 // Replace with your GAS WebApp URL
-const API_URL = "https://script.google.com/macros/s/AKfycbyaIUmvKpAp1h7moft2bBKiYQDulSOyw6TJ6blf0gP97qC78yTvAGPHeXfGsgEb8oX-/exec";
+const API_URL = window.RATE_API_URL;
 
 /* -------------------------- UX helpers -------------------------- */
 const $ = (sel) => document.querySelector(sel);
@@ -745,6 +745,52 @@ function wireGlobalToggles(data){
   if(applyGolaEl) applyGolaEl.onchange({target:applyGolaEl});
 }
 
+/* A no-cors POST response is opaque: it is not proof that a rate was saved. */
+async function verifySavedRates_(payload) {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt) await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+    try {
+      const url = new URL(API_URL);
+      url.searchParams.set('action', 'getDealerRates');
+      url.searchParams.set('dealer', payload.dealer);
+      url.searchParams.set('_', String(Date.now()));
+      const response = await safeFetch(url.toString(), {cache:'no-store'});
+      if (!response.ok) throw new Error('Could not verify saved rates. Your entries have been kept.');
+      const data = await response.json();
+      if (!data.ok) throw new Error('Could not verify saved rates. Your entries have been kept.');
+      const text = value => String(value ?? '').trim();
+      const term = value => text(value).startsWith('30') ? 30 : 15;
+      const failures = payload.items.filter(item => {
+        const key = `${item.product}||${item.category}||${item.size}`;
+        const cell = data.rates?.[payload.wefDate]?.[key];
+        if (!cell) return true;
+        const expected = {
+          rate:item.rate,
+          term:term(payload.applyTerm === 'per-item' ? item.term : payload.globalTerm),
+          brand:text(item.brand),
+          gstType:text(payload.applyGst === 'per-item' ? item.gstType : payload.globalGst) || 'Paid',
+          freight:text(payload.applyFreight === 'per-item' ? item.freight : payload.globalFreight),
+          cdValue:text(payload.applyCd === 'per-item' ? item.cdValue : payload.globalCd),
+          golaAddPrice:item.golaAddPrice ?? ''
+        };
+        return Object.entries(expected).some(([field,value]) => {
+          const actual = field === 'cdValue' ? (cell.cdValue ?? cell.cd) : cell[field];
+          return field === 'rate' || field === 'term' || (field === 'golaAddPrice' && value !== '')
+            ? text(actual) === '' || Number(actual) !== Number(value)
+            : text(actual) !== text(value);
+        });
+      });
+      if (!failures.length) return data;
+      const existing = failures.some(item => data.rates?.[payload.wefDate]?.[`${item.product}||${item.category}||${item.size}`]);
+      lastError = new Error(existing
+        ? `${failures.length} rate(s) unchanged. This WEF already has saved rates; the server skips re-entry for the same date. Your entries have been kept.`
+        : `${failures.length} rate(s) could not be confirmed. Your entries have been kept; check before retrying.`);
+    } catch (error) { lastError = error; }
+  }
+  throw lastError;
+}
+
 /* --------------------------- Submit --------------------------- */
 async function submitNewRates(){
   const dealer=document.getElementById("dealerSelect").value.trim();
@@ -791,20 +837,34 @@ async function submitNewRates(){
   if(!dealer) return showToast('Select dealer','error');
   if(!wef) return showToast('Enter new W.E.F','error');
   if(items.length===0) return showToast('Enter at least one new rate','error');
+  if(items.some(item => !Number.isFinite(item.rate) || item.rate <= 0)) return showToast('Rates must be greater than zero','error');
 
   try{
     setLoading(btn,true);
+    const payload={dealer,wefDate:wef,applyTerm,globalTerm,applyGst,globalGst,applyFreight,globalFreight,applyCd,globalCd,applyGola,globalGola,items};
+    const message = document.getElementById('saveMsg');
+    if(message) message.textContent = 'Saving and checking the recorded rates…';
     await safeFetch(API_URL,{
       method:"POST",mode:"no-cors",
-      headers:{"Content-Type":"application/json"},
+      headers:{"Content-Type":"text/plain;charset=UTF-8"},
       body:JSON.stringify({
         action:"saveRates",
-        payload:{dealer,wefDate:wef,applyTerm,globalTerm,applyGst,globalGst,applyFreight,globalFreight,applyCd,globalCd,applyGola,globalGola,items}
+        payload
       })
     });
-    showToast('Rates saved');
-    loadDealerRates();
-  }catch(err){showToast('Failed to save rates','error');}
+    const recorded = await verifySavedRates_(payload);
+    if(message) message.textContent = `${items.length} rate(s) verified for ${wef}.`;
+    showToast('Rates saved and verified');
+    if(document.getElementById('dealerSelect').value.trim() === dealer){
+      __lastData = recorded;
+      document.getElementById('ratesTable').dataset.products = JSON.stringify(recorded.products || []);
+      renderRatesView(recorded);
+    }
+  }catch(err){
+    const message = document.getElementById('saveMsg');
+    if(message) message.textContent = err.message || 'Save could not be confirmed. Your entries have been kept.';
+    showToast('Save could not be confirmed — see details below Save','error');
+  }
   finally{setLoading(btn,false);}
 }
 
