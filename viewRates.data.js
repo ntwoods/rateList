@@ -76,16 +76,16 @@ function normalizeDealerData_(raw) {
 }
 
 async function fetchLatestDealerData_(dealer) {
+  // The latest-only deployment omits rates whose saved product/size no longer
+  // matches the master (for example Kelvin Liner '-' versus 0.72 / 0.82).
+  // Load complete history; getViewData still selects each item's latest rate.
   let data;
   try {
-    data = await fetchJson(apiUrl(VIEW_LATEST_ACTION, { dealer }));
+    data = await fetchJson(apiUrl(VIEW_HISTORY_ACTION, { dealer }));
   } catch (_) {
     data = null;
   }
 
-  if (data?.ok) return { data, optimized: true };
-
-  data = await fetchJson(apiUrl(VIEW_HISTORY_ACTION, { dealer }));
   if (!data?.ok) data = await fetchJson(apiUrl(LEGACY_RATES_ACTION, { dealer }));
   return { data, optimized: false };
 }
